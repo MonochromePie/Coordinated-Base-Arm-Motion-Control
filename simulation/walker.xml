@@ -23,7 +23,7 @@ limitations under the License.
     <default class="robot">
     <default class="motor_DM8009">
         <joint frictionloss="0.1" damping="0.4"  limited="true" type="hinge" />
-        <position kp="250" kv="2.7" forcelimited="true" forcerange="-40 40" ctrllimited="true" />
+        <position kp="250" kv="2.7" forcelimited="true" forcerange="-80 80" ctrllimited="true" />
       </default>
 
       <default class="motor_DM4340">

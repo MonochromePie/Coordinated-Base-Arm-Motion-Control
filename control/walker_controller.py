@@ -38,7 +38,7 @@ class WalkerControl:
 
     BASE_JOINTS = ["x", "y", "lift", "yaw"]
 
-    def __init__(self, xml_path: str | Path, sim_dt: float = 0.002, vis_dt: float = 0.1) -> None:
+    def __init__(self, xml_path: str | Path, sim_dt: float = 0.1, vis_dt: float = 0.1) -> None:
         self.xml_path = Path(xml_path).resolve()
         self.model = mujoco.MjModel.from_xml_path(str(self.xml_path))
         self.data = mujoco.MjData(self.model)
@@ -55,7 +55,7 @@ class WalkerControl:
             + self.RIGHT_ARM_JOINTS
             + self.LEFT_FINGER_JOINTS
             + self.RIGHT_FINGER_JOINTS
-        }
+        }   
 
         self._actuator_ids = {
             self.model.actuator(i).name: i
@@ -266,24 +266,26 @@ if __name__ == "__main__":
 
         while sim.is_running():
 
-
             #example of setting the base, arms and grippers to a specific position
             # walker.set_base([0.0, 0.0, 0.0, 0.2])
             last_speed = 0.0
             current_speed = 0.0
-            if time.time() - start_time < 2:
+            if time.time() - start_time < 6:
                 walker.set_arm(sides="left", mode="pos", targets=[-0.6, -0.6, 1.57, 1.7, 0.0, 0.0, 0.0])
                 walker.set_arm(sides="right", mode="pos", targets=[2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
-            elif time.time() - start_time < 4:
+            elif time.time() - start_time < 7:
                 walker.set_arm(sides="left", mode="pos", targets=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
                 walker.set_arm(sides="right", mode="pos", targets=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
-            else:
+            elif time.time() - start_time < 8:
                 walker.set_arm(sides="left", mode="vel", targets=[-0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
                 current_speed = data.qpos[walker._joint_ids["openarm_left_joint1"]]
                 print("sim_speed_joint_1: ", (last_speed - current_speed) / walker.vis_dt)
                 last_speed = current_speed
+            else:
+                walker.set_arm(sides="left", mode="vel", targets=[0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
 
             # walker.set_arm(sides="right", mode="pos", targets=[1.57, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
             print("sim time passed: ", data.time)
