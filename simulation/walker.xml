@@ -21,7 +21,7 @@ limitations under the License.
     <!-- <geom friction="0.0001" margin="0.0005" /> -->
     <joint stiffness="0" ref="0.0" />
     <default class="robot">
-    <default class="motor_DM8009">
+      <default class="motor_DM8009">
         <joint frictionloss="0.1" damping="0.4"  limited="true" type="hinge" />
         <position kp="250" kv="2.7" forcelimited="true" forcerange="-80 80" ctrllimited="true" />
       </default>
@@ -543,6 +543,11 @@ limitations under the License.
 
 
   <actuator>
+    <position name="x-control" joint="x" kp="10000" kv="1000" forcelimited="true" forcerange="-5000 5000" ctrllimited="true" ctrlrange="-2 2" />
+    <position name="y-control" joint="y" kp="10000" kv="1000" forcelimited="true" forcerange="-5000 5000" ctrllimited="true" ctrlrange="-2 2" />
+    <position name="lift-control" joint="lift" kp="3000" kv="550" forcelimited="true" forcerange="-5000 5000" ctrllimited="true" ctrlrange="0.1 2" />
+    <position name="yaw-control" joint="yaw" kp="15000" ctrllimited="true" ctrlrange="-3.14159265 3.14159265" />
+    
     <position name="left_joint1_ctrl" joint="openarm_left_joint1" class="motor_DM8009" ctrlrange="-3.490659 1.396263" />
     <position name="left_joint2_ctrl" joint="openarm_left_joint2" class="motor_DM8009" ctrlrange="-3.316125 0.174533" />
     <position name="left_joint3_ctrl" joint="openarm_left_joint3" class="motor_DM4340" ctrlrange="-1.570796 1.570796" />
@@ -562,10 +567,7 @@ limitations under the License.
     <position name="right_joint7_ctrl" joint="openarm_right_joint7" class="motor_DM4310" ctrlrange="-1.570796 1.570796" />
     <position name="right_finger1_ctrl" joint="openarm_right_finger_joint1" class="motor_finger" />
     <position name="right_finger2_ctrl" joint="openarm_right_finger_joint2" class="motor_finger" />
-    <position name="yaw-control" joint="yaw" kp="15000" ctrllimited="true" ctrlrange="-3.14159265 3.14159265" />
-    <position name="x-control" joint="x" kp="10000" kv="1000" forcelimited="true" forcerange="-1000 1000" ctrllimited="true" ctrlrange="-2 2" />
-    <position name="y-control" joint="y" kp="10000" kv="1000" forcelimited="true" forcerange="-1000 1000" ctrllimited="true" ctrlrange="-2 2" />
-    <position name="lift-control" joint="lift" kp="3000" kv="550" forcelimited="true" forcerange="-500 500" ctrllimited="true" ctrlrange="0.1 2" />
+
   </actuator>
 
   <contact>

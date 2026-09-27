@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-
+import numpy as np
 import mujoco
 from pathlib import Path
 
@@ -11,9 +11,10 @@ class WalkerInfo:
     data: mujoco.MjData
     joints_info: dict[str, int] 
     """joint name and joint id."""
-    joints_pos: dict[input, float] = None
+    joints_pos: dict[int, float] = None
     """joint id and current position."""
-    
+    joint_limits: dict[int, list[float]] = None
+    """joint id and its limits."""
 
 class Walker:
 
@@ -49,18 +50,29 @@ class Walker:
 
     BASE_JOINTS = ["x", "y", "lift", "yaw"]
 
+    BASE_JNTLIMITS = [
+        [-2.0, 2.0],
+        [-2.0, 2.0],
+        [0.1, 2.0],
+        [-np.pi, np.pi]
+    ]
+
     def __init__(self, xml_path: Path):
         self.xml_path = Path(xml_path).resolve()
         self.model = mujoco.MjModel.from_xml_path(str(self.xml_path))
         self.data = mujoco.MjData(self.model)
         self.joint_names = self.BASE_JOINTS + self.LEFT_ARM_JOINTS + self.RIGHT_ARM_JOINTS + self.LEFT_FINGER_JOINTS + self.RIGHT_FINGER_JOINTS
 
-        self.joints_info = {
+        self.joints_info: dict[str, int] = {
             name: mujoco.mj_name2id(
                 self.model, mujoco.mjtObj.mjOBJ_JOINT, name
             )
             for name in self.joint_names
         }
+
+        for i in range(len(self.BASE_JOINTS)):
+            joint_id = self.joints_info[self.BASE_JOINTS[i]]
+            self.model.jnt_range[joint_id] = self.BASE_JNTLIMITS[i]
 
         self.joints_pos = self.get_joint_positions()
         self.vis_dt = None   
@@ -68,6 +80,7 @@ class Walker:
     def get_joint_positions(self) -> dict[int, float]:
         """Return current joint positions."""
         positions = {}
+        
 
         for name, joint_id in self.joints_info.items():
             qpos_address = self.model.jnt_qposadr[joint_id]
@@ -81,7 +94,8 @@ class Walker:
             model=self.model,
             data=self.data,
             joints_info=self.joints_info,
-            joints_pos=self.get_joint_positions()
+            joints_pos=self.get_joint_positions(),
+            joint_limits={joint_id: self.model.jnt_range[joint_id] for joint_id in self.joints_info.values()}
         )
 
     

@@ -12,7 +12,7 @@ class WalkerSimulationInfo:
     vis_dt: float
 
 class WalkerSimulation:
-    def __init__(self, walker: Walker, sim_dt = 0.002, vis_dt: float = 0.01):
+    def __init__(self, walker: Walker, sim_dt = 0.002, vis_dt: float = 0.01, showTime: bool = False):
         self.walker = walker
         self.sim_dt = sim_dt
         self.walker.model.opt.timestep = self.sim_dt
@@ -22,6 +22,7 @@ class WalkerSimulation:
         self.sim: viewer.Handle | None = None
         self._last_sync_time = 0.0
         self._start_time = 0.0
+        self._showTime = showTime   
 
     def visualize(self) -> None:
         self._start_time = time.time()
@@ -36,7 +37,10 @@ class WalkerSimulation:
                 if current_time - self._last_sync_time >= self.vis_dt:
                     self._step_simularions()
                     self.sim.sync()
-                    print(f"Simulation Time: {current_time - self._start_time:.2f} seconds")
+                    
+                    if self._showTime:
+                        print(f"Simulation Time: {self.walker.data.time:.2f} seconds")
+                
                     self._last_sync_time = current_time
 
     def get_simulation_info(self) -> WalkerSimulationInfo:
