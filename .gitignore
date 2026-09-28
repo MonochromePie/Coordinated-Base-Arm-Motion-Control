@@ -1,3 +1,4 @@
 .vscode/
 .venv/
 MUJOCO_LOG.TXT
+unused/

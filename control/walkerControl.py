@@ -1,6 +1,6 @@
 from walkerSimulation import WalkerSimulation
 from walker import Walker, WalkerInfo
-from pid import PID
+from unused.pid import PID
 import mujoco
 import threading
 import time
@@ -17,10 +17,6 @@ class WalkerControl:
         self._last_control_time = self.data.time
         self._control_dt = 0.0
 
-        self.PIDs: dict[int, PID] = {joint_id: PID(kp=1.0, ki=0.05, kd=0.1, max_integral=1.0, max_output=1.0) 
-                    for joint_id in self._targeted_joint_positions.keys()}
-
-
     def set_joint(self, joint_ids: list[int] , pos: list[float]) -> None:
         if len(joint_ids) != len(pos):
             raise ValueError("Length of joint_ids and pos must be the same.")
@@ -28,25 +24,18 @@ class WalkerControl:
         for joint_id, target_pos in zip(joint_ids, pos):
             self._targeted_joint_positions[joint_id] = target_pos
 
-    def _control_joint(self) -> None:
+    def step(self) -> None:
+        now = self.data.time
+        self._control_dt = now - self._last_control_time
+        self._last_control_time = now
 
-        if self.data.time - self._last_control_time < 0.001:
-            pass  # Skip control update if not enough time has passed
-        else:  
-            current_qpos = self.walker.get_joint_positions()
-            
-            for i, joint_id in enumerate(self._targeted_joint_positions.keys()):
-                        actuator_id = self.joint2actuatorID(joint_id)
-                        if actuator_id is not None:
-                            error = self._targeted_joint_positions[joint_id] - current_qpos[joint_id]
-
-                            pid_output = self.PIDs[joint_id].update(error, self._control_dt)
-                            clamped_pos = self._clamp_control(joint_id, self._targeted_joint_positions[joint_id] + pid_output)
-            
-                            self.data.ctrl[actuator_id] = clamped_pos
-
-                            self._control_dt = self.data.time - self._last_control_time
-                            self._last_control_time = self.data.time 
+        for i, joint_id in enumerate(self._targeted_joint_positions.keys()):
+                    actuator_id = self.joint2actuatorID(joint_id)
+                    if actuator_id is not None:
+                        
+                        clamped_pos = self._clamp_control(joint_id, self._targeted_joint_positions[joint_id])
+        
+                        self.data.ctrl[actuator_id] = clamped_pos
 
     def joint2actuatorID(self, joint_id: int) -> int | None:
             for actuator_id in range(self.model.nu):
@@ -72,15 +61,7 @@ class WalkerControl:
         clamped_pos = max(min(pos, max_range), min_range)
         return clamped_pos
 
-    def _control_loop(self) -> None:
-        while True:
-            self._control_joint()
-            time.sleep(self.simulation.sim_dt)  # Control loop runs at the visualization timestep
-        
-
-    def start_control_loop(self) -> None:
-        control_thread = threading.Thread(target=self._control_loop)
-        control_thread.start()
+    
 
     
 

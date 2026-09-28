@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-<mujoco model="openarm_bimanual scene">
-  <include file="walker.xml"/>
+<mujoco model="openarm_bimanual_pid scene">
+  <include file="walker_pid.xml"/>
 
   <statistic center="0 0 0.43" extent=".85" meansize="0.05"/>
 
