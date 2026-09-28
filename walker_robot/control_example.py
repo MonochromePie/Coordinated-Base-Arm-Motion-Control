@@ -24,7 +24,7 @@ def main():
             if not pos_called:
                 print("Targeted joint position:", control._targeted_joint_positions[walker.joints_info["openarm_left_joint1"]])
                 time.sleep(1.0)
-                control.set_joint_position([walker.joints_info["openarm_left_joint1"]], [-2.0], vel=1.5, acc=3.0)
+                control.set_joint_position([walker.joints_info["openarm_left_joint1"], walker.joints_info["x"]], [-2.0,1.0], vel=1.5, acc=3.0)
                 pos_called = True
 
         elif elapsed_time < 8.0:
