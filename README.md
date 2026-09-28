@@ -9,8 +9,10 @@ uv setup, if don't have uv, good luck
 uv sync
 ```
 
-## Run
+## To run pure simulation with manual control interface run:
 
 ```bash
 uv run simulation/walker_launch.py
 ```
+
+## To set up simulation and control look at walker/control_example.py 

@@ -73,14 +73,4 @@ class WalkerSimulation:
         )
 
 
-    
-if __name__ == "__main__":
 
-    from walker import Walker
-    
-    xml_path = "simulation/walker_scene.xml"
-    walker = Walker(xml_path)
-    simulation = WalkerSimulation(walker, sim_dt=0.002, vis_dt=0.01)
-    simulation.visualize()
-
-    
