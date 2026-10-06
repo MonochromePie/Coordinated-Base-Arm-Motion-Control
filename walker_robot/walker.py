@@ -97,6 +97,3 @@ class Walker:
             joints_pos=self.get_joint_positions(),
             joint_limits={joint_id: self.model.jnt_range[joint_id] for joint_id in self.joints_info.values()}
         )
-
-    
-

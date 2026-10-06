@@ -13,23 +13,32 @@ def main():
     sim.visualize()
     start_time = walker.data.time
     pos_called = False
+
+    
+    
     while True:
         elapsed_time = walker.data.time - start_time
 
         if elapsed_time < 2.0:
+            
             control.set_joint_velocity([walker.joints_info["openarm_left_joint1"]], [-0.5])
+            
+            
+        # joint should be closed to -1.0 after 2 seconds of moving at -0.5 rad/s 
         elif elapsed_time < 4.0:
 
-            # Should joint should be closed to -1.0 after 2 seconds of moving at -0.5 rad/s
+            #position control only called once
             if not pos_called:
-                print("Targeted joint position:", control._targeted_joint_positions[walker.joints_info["openarm_left_joint1"]])
                 time.sleep(1.0)
-                control.set_joint_position([walker.joints_info["openarm_left_joint1"], walker.joints_info["x"]], [-2.0,1.0], vel=1.5, acc=3.0)
+                control.set_joint_position([walker.joints_info["openarm_right_joint1"], walker.joints_info["x"], walker.joints_info["y"], walker.joints_info["lift"], walker.joints_info["yaw"]], [2.0,1.0,1.0,1.0,1.5], vel=5.0, acc=10.0, sync=True)
+            
                 pos_called = True
+                print(walker.joints_info)
 
         elif elapsed_time < 8.0:
-            control.set_joint_velocity([walker.joints_info["openarm_left_joint1"]], [0.5])
-        #should be back to 0.0 after complete
+            control.set_joint_velocity([walker.joints_info["openarm_left_joint1"]], [0.25])
+
+        # joint should be closed to 0.0 after 2 seconds of moving at -0.25 rad/s because no shit why wouldnt it not
 
         control.step()
         time.sleep(0.01)
