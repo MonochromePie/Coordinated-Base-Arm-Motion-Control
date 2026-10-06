@@ -14,8 +14,7 @@ def main():
     start_time = walker.data.time
     pos_called = False
 
-    
-    
+    print(walker.joints_info)
     while True:
         elapsed_time = walker.data.time - start_time
 
