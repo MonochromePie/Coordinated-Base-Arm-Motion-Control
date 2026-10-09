@@ -85,8 +85,8 @@ def main():
     TARGET_INTERVAL = 5.0          # seconds to let the robot travel
     MAX_IK_ITERS = 100
     POS_TOL = 1e-3                 # meters
-    TARGET_LOW  = np.array([-1.0, -1.0, 3.0])   # x, y, z bounds for random targets
-    TARGET_HIGH = np.array([ 1.0,  1.0, 5.0])
+    TARGET_LOW  = np.array([-1.0, -1.0, 0.6])   # x, y, z bounds for random targets
+    TARGET_HIGH = np.array([ 1.0,  1.0, 1.0])
     rng = np.random.default_rng()
 
     joint_ranges = np.array([walker.model.jnt_range[i] for i in range(11)])  # joint ranges for joints 0-10
