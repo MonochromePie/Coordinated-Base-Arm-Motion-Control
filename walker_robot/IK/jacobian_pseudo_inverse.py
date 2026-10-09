@@ -19,7 +19,120 @@ class JacobianPseudoInverse:
         return np.linalg.pinv(J) @ err
 
 
+    def solve_ik_DSL(self, current_joint_state: dict, target: np.array, damped_factor: float) -> np.array:
+        """
+        Compute the damped pseudo-inverse of the given Jacobian matrix using the Levenberg-Marquardt method.
+        Args:
+            target: [3 x 1] target position as a numpy array.
+            damping_factor: scalar value for damping.
+        Returns:
+            changes to the current joint state.
+        """
+        J = self.fk.jacobian_np(current_joint_state)
+        err = target - self.fk.pos_np(current_joint_state)
 
+        J_damped = J.T @ np.linalg.inv(J @ J.T + (damped_factor ** 2) * np.eye(J.shape[0]))
+        return J_damped @ err
+
+    @staticmethod
+    def _limit_weights(q, dq, lim, margin, gain):
+        """
+        Per-joint cost multiplier w_i >= 1.
+
+        w_i == 1 when joint i is moving away from its nearest limit, or is
+        still outside the margin zone. Inside the zone (the last `margin`
+        fraction of the range) and moving TOWARD that limit, w_i grows
+        smoothly and blows up as q_i reaches the limit.
+        Infinite limits (e.g. a base x/y axis) are never penalised.
+        """
+        lo, hi = lim[:, 0], lim[:, 1]
+        rng = hi - lo
+        finite = np.isfinite(rng) & (rng > 0)
+        safe_rng = np.where(finite, rng, 1.0)
+
+        # normalised distance (0..1) to the limit this joint is heading toward
+        dist = np.where(dq >= 0.0, hi - q, q - lo) / safe_rng
+        dist = np.where(finite, dist, np.inf)
+
+        p = np.clip((margin - dist) / margin, 0.0, 1.0)  # 0 = far, 1 = at limit
+        return 1.0 + gain * p ** 2 / (1.0 - p + 1e-3)
+
+   
+
+    def solve_ik_DSL_limits(
+        self,
+        current_joint_state: dict,
+        target: np.array,
+        joint_limits,
+        damped_factor=0.3,
+        margin: float = 0.15,
+        gain: float = 50.0,
+        n_refine: int = 2,
+        rest_pos=None,
+        rest_weight=0.002,
+    ) -> np.array:
+        """
+        Weighted damped least squares with
+          (a) joint-limit damping: extra damping when a joint moves toward a limit
+          (b) resting-position pull: a soft cost on distance from each joint's rest pos
+
+            minimise ||J dq - err||^2 + dq^T diag(lam^2 * w) dq
+                     + sum_i r_i (q_i + dq_i - q_rest_i)^2
+
+        Args:
+            current_joint_state: dict {symbol: value}, ordered like the Jacobian columns.
+            target: [3] target position.
+            joint_limits: (n, 2) array or dict {symbol: (lo, hi)}; +-np.inf = unlimited.
+            damped_factor: scalar lambda, or length-n vector.
+            margin, gain, n_refine: joint-limit penalty settings (see _limit_weights).
+            rest_pos: dict {symbol: rest value} (symbols you leave out have no rest pos),
+                or a length-n array with np.nan where a joint has no rest pos. None = off.
+            rest_weight: scalar, or length-n vector of per-joint pull strength r_i.
+        Returns:
+            dq, the change to the current joint state (kept within limits).
+        """
+        J = self.fk.jacobian_np(current_joint_state)
+        err = target - self.fk.pos_np(current_joint_state)
+        n = J.shape[1]
+
+        q = np.array([float(v) for v in current_joint_state.values()])
+        if isinstance(joint_limits, dict):
+            lim = np.array([joint_limits[s] for s in current_joint_state], dtype=float)
+        else:
+            lim = np.asarray(joint_limits, dtype=float)
+        if lim.shape != (n, 2):
+            raise ValueError(f"joint_limits must have shape ({n}, 2), got {lim.shape}")
+
+        # resting-position pull: R_i = weight for joints that have a rest pos, else 0
+        R = np.zeros(n)
+        rest_off = np.zeros(n)  # (q - q_rest), 0 where there is no rest pos
+        if rest_pos is not None:
+            if isinstance(rest_pos, dict):
+                q_rest = np.array([rest_pos.get(s, np.nan) for s in current_joint_state], dtype=float)
+            else:
+                q_rest = np.asarray(rest_pos, dtype=float)
+            if q_rest.shape != (n,):
+                raise ValueError(f"rest_pos must have length {n}, got {q_rest.shape}")
+            has_rest = np.isfinite(q_rest)
+            w_rest = np.broadcast_to(np.asarray(rest_weight, dtype=float), (n,))
+            R = np.where(has_rest, w_rest, 0.0)
+            rest_off = np.where(has_rest, q - q_rest, 0.0)
+
+        lam2 = np.broadcast_to(np.asarray(damped_factor, dtype=float) ** 2, (n,))
+        A0 = J.T @ J + np.diag(R)
+        b = J.T @ err - R * rest_off
+
+        def solve(w):
+            return np.linalg.solve(A0 + np.diag(lam2 * w), b)
+
+        # limit weights depend on the direction of dq, so refine: solve, reweight, re-solve
+        dq = solve(np.ones(n))
+        for _ in range(n_refine):
+            dq = solve(self._limit_weights(q, dq, lim, margin, gain))
+
+        # safety net: never step past a hard limit
+        return np.clip(q + dq, lim[:, 0], lim[:, 1]) - q
+    
 if __name__ == "__main__":
 
     import sympy as sp

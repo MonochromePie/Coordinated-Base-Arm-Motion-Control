@@ -83,20 +83,45 @@ def main():
 
     # --- settings ---
     TARGET_INTERVAL = 5.0          # seconds to let the robot travel
-    MAX_IK_ITERS = 20
+    MAX_IK_ITERS = 100
     POS_TOL = 1e-3                 # meters
-    TARGET_LOW  = np.array([-1.5, -1.5, 0.1])   # x, y, z bounds for random targets
-    TARGET_HIGH = np.array([ 1.5,  1.5, 1.5])
+    TARGET_LOW  = np.array([-1.0, -1.0, 3.0])   # x, y, z bounds for random targets
+    TARGET_HIGH = np.array([ 1.0,  1.0, 5.0])
     rng = np.random.default_rng()
 
+    joint_ranges = np.array([walker.model.jnt_range[i] for i in range(11)])  # joint ranges for joints 0-10
+    # Reorder to `symbols` order (sim order is x,y,lift,yaw,... but symbols is x,y,yaw,lift,...)
+    joint_limits = np.array([joint_ranges[symbol_name_to_index(s.name)] for s in symbols], dtype=float)
 
+    # MuJoCo reports [0, 0] for joints without a range -> treat as unlimited
+    unlimited = joint_limits[:, 0] >= joint_limits[:, 1]
+    joint_limits[unlimited] = [-np.inf, np.inf]
+ 
+    
+    DAMPING = 0.2        # baseline lambda: scalar, or a length-11 vector in `symbols` order
+    LIMIT_MARGIN = 0.15    # penalty starts in the last 15% of each joint's range
+    LIMIT_GAIN = 50.0      # Joint Limits Penalty
+    REST_POS = {
+        q_l1: 0.0,
+        q_l2: -0.4,
+        q_l3: 0.2,
+        q_l4: 1.7,
+        q_l5: 0.06,
+        q_l6: 0.0,
+        q_l7: 0.0,
+    }
+    REST_WEIGHT = 0.004  
+    
     def solve_to_target(target):
-        """Iterate the pseudo-inverse IK from the current state. Returns (iters, final_error, solve_time_s)."""
+        """Iterate the limit-aware DLS IK from the current state. Returns (iters, final_error, solve_time_s)."""
         t0 = time.perf_counter()
         err = np.inf
         iters = 0
         for iters in range(1, MAX_IK_ITERS + 1):
-            joint_changes = jacobian_pinv_solver.solve_ik(current_joint_state, target)
+            joint_changes = jacobian_pinv_solver.solve_ik_DSL_limits(
+                current_joint_state, target, joint_limits,
+                damped_factor=DAMPING, margin=LIMIT_MARGIN, gain=LIMIT_GAIN,
+                rest_pos=REST_POS, rest_weight=REST_WEIGHT)      # <- only these two args are new
             for k, symbol in enumerate(symbols):
                 current_joint_state[symbol] += joint_changes[k]
             err = np.linalg.norm(target - fk.pos_np(current_joint_state))
@@ -104,12 +129,10 @@ def main():
                 break
         return iters, err, time.perf_counter() - t0
 
-
     def send_to_sim():
         pos_dict = {symbol_name_to_index(s.name): current_joint_state[s] for s in symbols}
         control.set_joint_position(list(pos_dict.keys()), list(pos_dict.values()),
                                 vel=5.0, acc=10.0, sync=True)
-
 
     def get_actual_eff_pos():
         """Read joint angles (ids 0-10) from the sim and plug them into the FK model."""
