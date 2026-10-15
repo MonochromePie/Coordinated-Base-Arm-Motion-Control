@@ -2,3 +2,5 @@
 .venv/
 MUJOCO_LOG.TXT
 unused/
+__pycache__/
+*.pyc

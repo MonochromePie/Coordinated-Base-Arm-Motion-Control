@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "mujoco>=3.13.0",
+    "numpy>=2.5.3",
     "sympy>=1.14.0",
 ]
 
@@ -18,3 +19,9 @@ coordinated-base-arm-motion-control = "coordinated_base_arm_motion_control:main"
 [build-system]
 requires = ["uv_build>=0.12.13,<0.13.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "matplotlib>=3.11.2",
+    "pillow>=12.3.0",
+]

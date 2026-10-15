@@ -1,3 +1,8 @@
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))   # walker_robot/, for `from IK import ...`
+
 from walker import Walker
 from walkerSimulation import WalkerSimulation
 from walkerControl import WalkerControl

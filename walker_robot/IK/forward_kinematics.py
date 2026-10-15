@@ -168,13 +168,15 @@ class ForwardKinematics:
             "quaternion": self.get_quaternion,
             "jacobian": lambda: self.jacobian,
             "pose_jacobian": lambda: self.pose_jacobian,
+            # d(R)/dq, R flattened row-major -> (9, n); used for the geometric angular Jacobian
+            "rotation_jacobian": lambda: self.eff_orientation_matrix.reshape(9, 1).jacobian(self.variables),
         }
 
     def evaluate(self, name: str, values: dict) -> np.ndarray:
         """
         Numeric equivalent of expr.subs(values), using a cached sp.lambdify function.
         name: one of transformation_matrix, eff_pos, orientation_matrix, euler_ZYX,
-              euler_XYZ, quaternion, jacobian, pose_jacobian
+              euler_XYZ, quaternion, jacobian, pose_jacobian, rotation_jacobian
         """
         fn = self._lambdas.get(name)
         if fn is None:
@@ -202,6 +204,61 @@ class ForwardKinematics:
 
     def pose_jacobian_pinv(self, values: dict) -> np.ndarray:  # (n, 6)
         return np.linalg.pinv(self.pose_jacobian_np(values))
+
+    def orientation_matrix_np(self, values: dict) -> np.ndarray:  # (3, 3)
+        return self.evaluate("orientation_matrix", values)
+
+    def angular_jacobian_np(self, values: dict) -> np.ndarray:  # (3, n)
+        """
+        Geometric angular-velocity Jacobian (base frame): omega = Jw @ dq.
+        Column i is vee(dR/dq_i @ R^T); prismatic joints give a zero column.
+        Unlike pose_jacobian (Euler-angle rates) it has no gimbal-lock singularity.
+        """
+        R = self.evaluate("orientation_matrix", values)
+        dR = self.evaluate("rotation_jacobian", values).reshape(3, 3, -1)
+        W = np.einsum("ijk,lj->ilk", dR, R)  # W[:, :, k] = dR_k @ R^T (skew-symmetric)
+        return np.stack([W[2, 1], W[0, 2], W[1, 0]])
+
+    def geometric_jacobian_np(self, values: dict) -> np.ndarray:  # (6, n) [linear; angular]
+        return np.vstack([self.jacobian_np(values), self.angular_jacobian_np(values)])
+
+    # ---- rotation helpers (numpy) ----
+
+    @staticmethod
+    def euler_ZYX_to_rotmat(roll: float, pitch: float, yaw: float) -> np.ndarray:
+        """R = Rz(yaw) @ Ry(pitch) @ Rx(roll), angles in radians (inverse of get_euler_angles_ZYX)."""
+        cr, sr = np.cos(roll), np.sin(roll)
+        cp, sp_ = np.cos(pitch), np.sin(pitch)
+        cy, sy = np.cos(yaw), np.sin(yaw)
+        return np.array([
+            [cy * cp, cy * sp_ * sr - sy * cr, cy * sp_ * cr + sy * sr],
+            [sy * cp, sy * sp_ * sr + cy * cr, sy * sp_ * cr - cy * sr],
+            [-sp_,    cp * sr,                 cp * cr],
+        ])
+
+    @staticmethod
+    def rotmat_to_euler_ZYX(R: np.ndarray) -> np.ndarray:
+        """Numeric twin of get_euler_angles_ZYX. Returns [roll, pitch, yaw] in radians."""
+        return np.array([
+            np.arctan2(R[2, 1], R[2, 2]),
+            np.arctan2(-R[2, 0], np.hypot(R[0, 0], R[1, 0])),
+            np.arctan2(R[1, 0], R[0, 0]),
+        ])
+
+    @staticmethod
+    def rotation_error(R_target: np.ndarray, R_current: np.ndarray) -> np.ndarray:
+        """
+        Rotation vector (axis * angle, base frame) that rotates R_current onto R_target,
+        i.e. log(R_target @ R_current^T). Always takes the short way round (angle <= pi).
+        Pairs with angular_jacobian_np: driving omega along this vector closes the error.
+        """
+        q = ForwardKinematics.rotmat_to_quat(R_target @ R_current.T)
+        if q[0] < 0.0:  # q and -q are the same rotation; pick the one with angle <= pi
+            q = -q
+        s = np.linalg.norm(q[1:])
+        if s < 1e-9:
+            return 2.0 * q[1:]  # small-angle limit
+        return (2.0 * np.arctan2(s, q[0]) / s) * q[1:]
     
 if __name__ == "__main__":
     

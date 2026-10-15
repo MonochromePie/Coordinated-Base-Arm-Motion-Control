@@ -1,5 +1,5 @@
 from .dh_parameter import DHParameter
 from .forward_kinematics import ForwardKinematics
-from .jacobian_pseudo_inverse import JacobianPseudoInverse
+from .inverse_kinematics import InverseKinematics
 
-__all__ = ["DHParameter", "ForwardKinematics", "JacobianPseudoInverse"]
+__all__ = ["DHParameter", "ForwardKinematics", "InverseKinematics"]

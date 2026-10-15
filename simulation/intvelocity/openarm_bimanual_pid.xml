@@ -648,20 +648,20 @@ limitations under the License.
 
 
   <actuator>
-    <plugin name="left_joint1_ctrl" joint="openarm_left_joint1" plugin="mujoco.pid" instance="pid_left_joint1_ctrl" actdim="1" forcelimited="true" forcerange="-40 40" ctrllimited="true" ctrlrange="-3.490659 1.396263" />
-    <plugin name="left_joint2_ctrl" joint="openarm_left_joint2" plugin="mujoco.pid" instance="pid_left_joint2_ctrl" actdim="1" forcelimited="true" forcerange="-40 40" ctrllimited="true" ctrlrange="-3.316125 0.174533" />
-    <plugin name="left_joint3_ctrl" joint="openarm_left_joint3" plugin="mujoco.pid" instance="pid_left_joint3_ctrl" actdim="1" forcelimited="true" forcerange="-27 27" ctrllimited="true" ctrlrange="-1.570796 1.570796" />
-    <plugin name="left_joint4_ctrl" joint="openarm_left_joint4" plugin="mujoco.pid" instance="pid_left_joint4_ctrl" actdim="1" forcelimited="true" forcerange="-27 27" ctrllimited="true" ctrlrange="0 2.443461" />
+    <plugin name="left_joint1_ctrl" joint="openarm_left_joint1" plugin="mujoco.pid" instance="pid_left_joint1_ctrl" actdim="1" forcelimited="true" forcerange="-80 80" ctrllimited="true" ctrlrange="-3.490659 1.396263" />
+    <plugin name="left_joint2_ctrl" joint="openarm_left_joint2" plugin="mujoco.pid" instance="pid_left_joint2_ctrl" actdim="1" forcelimited="true" forcerange="-80 80" ctrllimited="true" ctrlrange="-3.316125 0.174533" />
+    <plugin name="left_joint3_ctrl" joint="openarm_left_joint3" plugin="mujoco.pid" instance="pid_left_joint3_ctrl" actdim="1" forcelimited="true" forcerange="-80 80" ctrllimited="true" ctrlrange="-1.570796 1.570796" />
+    <plugin name="left_joint4_ctrl" joint="openarm_left_joint4" plugin="mujoco.pid" instance="pid_left_joint4_ctrl" actdim="1" forcelimited="true" forcerange="-80 80" ctrllimited="true" ctrlrange="0 2.443461" />
     <plugin name="left_joint5_ctrl" joint="openarm_left_joint5" plugin="mujoco.pid" instance="pid_left_joint5_ctrl" actdim="1" forcelimited="true" forcerange="-7 7" ctrllimited="true" ctrlrange="-1.570796 1.570796" />
     <plugin name="left_joint6_ctrl" joint="openarm_left_joint6" plugin="mujoco.pid" instance="pid_left_joint6_ctrl" actdim="1" forcelimited="true" forcerange="-7 7" ctrllimited="true" ctrlrange="-0.785398 0.785398" />
     <plugin name="left_joint7_ctrl" joint="openarm_left_joint7" plugin="mujoco.pid" instance="pid_left_joint7_ctrl" actdim="1" forcelimited="true" forcerange="-7 7" ctrllimited="true" ctrlrange="-1.570796 1.570796" />
     <plugin name="left_finger1_ctrl" joint="openarm_left_finger_joint1" plugin="mujoco.pid" instance="pid_left_finger1_ctrl" actdim="1" forcelimited="true" forcerange="-333 333" ctrllimited="true" ctrlrange="0 0.044" />
     <plugin name="left_finger2_ctrl" joint="openarm_left_finger_joint2" plugin="mujoco.pid" instance="pid_left_finger2_ctrl" actdim="1" forcelimited="true" forcerange="-333 333" ctrllimited="true" ctrlrange="0 0.044" />
     
-    <plugin name="right_joint1_ctrl" joint="openarm_right_joint1" plugin="mujoco.pid" instance="pid_right_joint1_ctrl" actdim="1" forcelimited="true" forcerange="-40 40" ctrllimited="true" ctrlrange="-1.396263 3.490659" />
-    <plugin name="right_joint2_ctrl" joint="openarm_right_joint2" plugin="mujoco.pid" instance="pid_right_joint2_ctrl" actdim="1" forcelimited="true" forcerange="-40 40" ctrllimited="true" ctrlrange="-0.174533 3.316125" />
-    <plugin name="right_joint3_ctrl" joint="openarm_right_joint3" plugin="mujoco.pid" instance="pid_right_joint3_ctrl" actdim="1" forcelimited="true" forcerange="-27 27" ctrllimited="true" ctrlrange="-1.570796 1.570796" />
-    <plugin name="right_joint4_ctrl" joint="openarm_right_joint4" plugin="mujoco.pid" instance="pid_right_joint4_ctrl" actdim="1" forcelimited="true" forcerange="-27 27" ctrllimited="true" ctrlrange="0 2.443461" />
+    <plugin name="right_joint1_ctrl" joint="openarm_right_joint1" plugin="mujoco.pid" instance="pid_right_joint1_ctrl" actdim="1" forcelimited="true" forcerange="-80 80" ctrllimited="true" ctrlrange="-1.396263 3.490659" />
+    <plugin name="right_joint2_ctrl" joint="openarm_right_joint2" plugin="mujoco.pid" instance="pid_right_joint2_ctrl" actdim="1" forcelimited="true" forcerange="-80 80" ctrllimited="true" ctrlrange="-0.174533 3.316125" />
+    <plugin name="right_joint3_ctrl" joint="openarm_right_joint3" plugin="mujoco.pid" instance="pid_right_joint3_ctrl" actdim="1" forcelimited="true" forcerange="-80 80" ctrllimited="true" ctrlrange="-1.570796 1.570796" />
+    <plugin name="right_joint4_ctrl" joint="openarm_right_joint4" plugin="mujoco.pid" instance="pid_right_joint4_ctrl" actdim="1" forcelimited="true" forcerange="-80 80" ctrllimited="true" ctrlrange="0 2.443461" />
     <plugin name="right_joint5_ctrl" joint="openarm_right_joint5" plugin="mujoco.pid" instance="pid_right_joint5_ctrl" actdim="1" forcelimited="true" forcerange="-7 7" ctrllimited="true" ctrlrange="-1.570796 1.570796" />
     <plugin name="right_joint6_ctrl" joint="openarm_right_joint6" plugin="mujoco.pid" instance="pid_right_joint6_ctrl" actdim="1" forcelimited="true" forcerange="-7 7" ctrllimited="true" ctrlrange="-0.785398 0.785398" />
     <plugin name="right_joint7_ctrl" joint="openarm_right_joint7" plugin="mujoco.pid" instance="pid_right_joint7_ctrl" actdim="1" forcelimited="true" forcerange="-7 7" ctrllimited="true" ctrlrange="-1.570796 1.570796" />

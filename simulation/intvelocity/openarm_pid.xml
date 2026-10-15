@@ -53,7 +53,7 @@ limitations under the License.
         <config key="imax" value="5"/>
       </instance>
       <instance name="pid_joint4_ctrl">
-        <config key="kp" value="30"/>
+        <config key="kp" value="200"/>
         <config key="ki" value="1.5"/>
         <config key="kd" value="2.2"/>
         <config key="imax" value="5"/>
