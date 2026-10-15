@@ -5,7 +5,6 @@ import numpy as np
 
 from IK import ForwardKinematics
 from reference_frame import WORLD, convert_pose, targets_to_world
-from .mujoco_sim import IK_TO_SIM_OFFSET
 
 # base joint -> base group (as in BimanualIK.step) and top speed when following the manual slider
 BASE_JOINT_GROUPS = {"x": "xy", "y": "xy", "yaw": "yaw", "lift": "lift"}
@@ -102,9 +101,9 @@ def _update_display(ik, sim, gui, viewer, command, targets, frame):
     frames = []
     for side, target in targets.items():
         R_target = None if target.rpy is None else ForwardKinematics.euler_ZYX_to_rotmat(*target.rpy)
-        frames.append((target.pos + IK_TO_SIM_OFFSET, R_target, 0.10, 0.9))      # target: big frame
+        frames.append((target.pos, R_target, 0.10, 0.9))      # target: big frame
         pos, R = model_poses[side]
-        frames.append((pos + IK_TO_SIM_OFFSET, R, 0.06, 0.4))                    # IK model's end effector: small, faint
+        frames.append((pos, R, 0.06, 0.4))                    # IK model's end effector: small, faint
 
     if gui.show_joint_frames() and targets:
         joints = list(BASE_JOINT_GROUPS) + [j for side in targets for j in ARM_JOINTS[side]]
