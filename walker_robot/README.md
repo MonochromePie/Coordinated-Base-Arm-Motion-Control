@@ -351,6 +351,10 @@ This is what `BimanualIK.step()` → `InverseKinematics.solve_ik_stacked()` does
   - **World (absolute)**: targets are fixed in the room.
   - **Robot base (relative)**: targets move with the base ([reference_frame.py](reference_frame.py)).
     Base x/y/yaw are locked for the IK in this mode, since moving the base would also move the target.
+  - **Drag targets in MuJoCo** (Display box): double-click a hand in the viewer to select it, then
+    **Ctrl + left drag** rotates that arm's target and **Ctrl + right drag** moves it (add Shift for the
+    other plane). The sliders follow. While this is on, the drag only moves the target and does not push
+    the robot ([sim/drag_targets.py](sim/drag_targets.py)). When it is off, Ctrl + drag is MuJoCo's usual push.
 
 The control loop ([sim/control_loop.py](sim/control_loop.py)) runs at 100 Hz:
 read GUI → convert targets to world → `ik.step()` → send command → step physics. To run on the real

@@ -5,6 +5,8 @@ import numpy as np
 
 from IK import ForwardKinematics
 from reference_frame import WORLD, convert_pose, targets_to_world
+from .drag_targets import DragTargets
+from .mujoco_sim import IK_TO_SIM_OFFSET
 
 # base joint -> base group (as in BimanualIK.step) and top speed when following the manual slider
 BASE_JOINT_GROUPS = {"x": "xy", "y": "xy", "yaw": "yaw", "lift": "lift"}
@@ -24,6 +26,9 @@ def run_control_loop(ik, sim, gui, home_state: dict, ik_rate: float = 100.0) -> 
     A frame switch re-expresses the stored targets with that same base pose, so the world
     targets the IK sees do not change at the switch.
 
+    With the GUI's drag option on, dragging an arm's hand in the viewer (double-click, then
+    Ctrl + left / right drag) moves that arm's target instead of pushing the robot (DragTargets).
+
     Base joints the IK does not move follow the GUI's manual base sliders (speed limited);
     while the IK moves them, the sliders are kept on the IK's base pose so handing a joint
     back to manual control does not make it jump.
@@ -37,6 +42,7 @@ def run_control_loop(ik, sim, gui, home_state: dict, ik_rate: float = 100.0) -> 
 
     def worker():
         command = sim.read_joint_state()
+        drag = DragTargets(sim.model)
         gui.set_base_values({joint: command[joint] for joint in BASE_JOINT_GROUPS})
         tick = 0
         with sim.launch_viewer() as viewer:
@@ -59,6 +65,11 @@ def run_control_loop(ik, sim, gui, home_state: dict, ik_rate: float = 100.0) -> 
                     gui.switch_frame(new_frame, lambda pos, rpy, src, dst:
                                      convert_pose(pos, rpy, src, dst, command))
 
+                # ---- drag in the viewer: moves a target ----
+                drag_on = gui.drag_targets_enabled()
+                if drag_on:
+                    _drag_targets(drag, viewer, gui, command)
+
                 # ---- manual base: joints the IK does not move head for their slider value ----
                 targets, base_groups, frame, base_manual = gui.get_request()
                 command = dict(command)
@@ -76,6 +87,8 @@ def run_control_loop(ik, sim, gui, home_state: dict, ik_rate: float = 100.0) -> 
 
                 # ---- sim ----
                 sim.send_joint_command(command)
+                if drag_on:
+                    sim.clear_perturbation()        # the drag moved the target, it must not push the robot
                 sim.step(substeps)
 
                 # ---- visuals + status (10 Hz) ----
@@ -91,6 +104,21 @@ def run_control_loop(ik, sim, gui, home_state: dict, ik_rate: float = 100.0) -> 
     thread.start()
     gui.run()           # blocks until the window is closed
     thread.join(timeout=1.0)
+
+
+def _drag_targets(drag, viewer, gui, command):
+    """Apply a hand drag in the viewer to that arm's target in the GUI (in the GUI's frame)."""
+    frame = gui.get_request()[2]
+
+    def current_target(side):
+        pos, rpy = convert_pose(*gui.get_target_values()[side], frame, WORLD, command)
+        return pos, ForwardKinematics.euler_ZYX_to_rotmat(*rpy)
+
+    with viewer.lock():
+        dragged = drag.update(viewer.perturb, current_target)
+    if dragged:
+        gui.set_targets({side: convert_pose(pos, ForwardKinematics.rotmat_to_euler_ZYX(R), WORLD, frame, command)
+                         for side, (pos, R) in dragged.items()})
 
 
 def _update_display(ik, sim, gui, viewer, command, targets, frame):

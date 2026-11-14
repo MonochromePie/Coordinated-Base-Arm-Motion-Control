@@ -28,7 +28,8 @@ class TargetGUI:
     Pop-up window with sliders for the end-effector targets (xyz + roll/pitch/yaw, ZYX) for each arm.
     Runs in the main thread (run()); the control thread talks to it only through
     get_request(), set_status(), take_reset(), set_targets(), take_frame_request(),
-    switch_frame(), set_base_values(), show_joint_frames() and close(), which are thread-safe.
+    switch_frame(), set_base_values(), show_joint_frames(), drag_targets_enabled(),
+    get_target_values() and close(), which are thread-safe.
 
     Targets are given in the selected frame ("world" or "base"). The exact values live in
     self._values, not in the sliders (which clamp to their range), so a frame switch can
@@ -136,6 +137,12 @@ class TargetGUI:
         self._joint_frames_value = False
         ttk.Checkbutton(display_box, text="Show joint frames (controlled arms + base)",
                         variable=self._joint_frames, command=self._on_joint_frames).grid(row=0, column=0, sticky="w")
+        # drag the targets in the MuJoCo viewer instead of pushing the robot (DragTargets)
+        self._drag_targets = tk.BooleanVar(value=False)
+        self._drag_targets_value = False
+        ttk.Checkbutton(display_box, text="Drag targets in MuJoCo (double-click a hand; Ctrl + left drag = "
+                                          "rotate, Ctrl + right drag = move)",
+                        variable=self._drag_targets, command=self._on_drag_targets).grid(row=1, column=0, sticky="w")
 
         ttk.Button(self.root, text="Reset all joints to 0", command=self._on_reset).grid(
             row=4, column=0, columnspan=len(initial_targets), pady=(0, 8))
@@ -201,6 +208,16 @@ class TargetGUI:
     def show_joint_frames(self) -> bool:
         with self._lock:
             return self._joint_frames_value
+
+    def drag_targets_enabled(self) -> bool:
+        with self._lock:
+            return self._drag_targets_value
+
+    def get_target_values(self) -> dict:
+        """{side: (pos, rpy)} of every arm in the current frame, also inactive arms and
+        untracked orientations (unlike get_request())."""
+        with self._lock:
+            return {side: (v[:3].copy(), v[3:].copy()) for side, v in self._values.items()}
 
     def close(self) -> None:
         with self._lock:
@@ -277,6 +294,11 @@ class TargetGUI:
         show = bool(self._joint_frames.get())
         with self._lock:
             self._joint_frames_value = show
+
+    def _on_drag_targets(self) -> None:
+        enabled = bool(self._drag_targets.get())
+        with self._lock:
+            self._drag_targets_value = enabled
 
     def _on_reset(self) -> None:
         with self._lock:

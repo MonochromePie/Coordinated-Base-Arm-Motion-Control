@@ -56,6 +56,11 @@ class MujocoSim:
         self.send_joint_command(state)
         mujoco.mj_forward(self.model, self.data)
 
+    def clear_perturbation(self) -> None:
+        """Remove the viewer's mouse perturbation force (the passive viewer's sync() writes it
+        into xfrc_applied while a body is Ctrl-dragged)."""
+        self.data.xfrc_applied[:] = 0.0
+
     def step(self, n: int = 1) -> None:
         mujoco.mj_step(self.model, self.data, nstep=n)
 
