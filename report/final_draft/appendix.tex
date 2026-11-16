@@ -1,0 +1,295 @@
+% ============================================================
+% APPENDICES (included from main.tex after the bibliography)
+% ============================================================
+\clearpage
+\appendix
+\renewcommand{\thesection}{\Alph{section}}
+
+\section{Videos}
+\label{app:videos}
+
+\begin{table}[H]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{p{0.06\linewidth} p{0.56\linewidth} p{0.30\linewidth}}
+        \toprule
+        No. & Content & Link \\
+        \midrule
+        V1 & Unified base--arm model: OpenArm with virtual base joints in MuJoCo (first progress report) &
+            \vidlink{https://youtu.be/VUVee6bROx8}{youtu.be/VUVee6bROx8} \\
+        V2 & Pseudoinverse versus DLS near a singular configuration (Fig.~\ref{fig:singularity}) &
+            \vidlink{https://youtu.be/MEW62I4-9JQ}{youtu.be/MEW62I4-9JQ} \\
+        V3 & Single arm: per-joint DLS versus DLS with the rest pull (Fig.~\ref{fig:rest_single}) &
+            \vidlink{https://youtu.be/wrWfXNqLJrA}{youtu.be/wrWfXNqLJrA} \\
+        V4 & Two arms: averaged base step versus stacked solve on the showcase target pair
+            (Table~\ref{tab:app_showcase}) & \vidlink{https://youtu.be/Ey7bL1Zsx1M}{youtu.be/Ey7bL1Zsx1M} \\
+        V5 & Live full-body IK with the mode GUI (hands, orientation, base and lift) &
+            \vidlink{https://youtu.be/Kn5jznpRHcw}{youtu.be/Kn5jznpRHcw} \\
+        V6 & Weighted rest pose, no posture term and null-space rest posture on the benchmark targets
+            (Fig.~\ref{fig:nullspace}) & \vidlink{https://youtu.be/3rgqf_vf3_w}{youtu.be/3rgqf\_vf3\_w} \\
+        V7 & Full-body IK tool on the Walkie simulation: preview and whole-body execution & \tbcinline \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small{Videos referenced in this report.}}
+    \label{tab:videos}
+\end{table}
+
+\section{Software and Reproduction}
+\label{app:software}
+
+\begin{table}[H]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{p{0.33\linewidth} p{0.60\linewidth}}
+        \toprule
+        Repository & Contents \\
+        \midrule
+        \vidlink{https://github.com/MonochromePie/Coordinated-Base-Arm-Motion-Control}{Coordinated-Base-Arm-Motion-Control}
+            & IK solver and its versions (\texttt{walker\_robot/}), offline benchmark (\texttt{benchmark/}),
+              scenario playback (\texttt{ik\_sim/}), Walker MuJoCo models, and these reports (\texttt{report/}) \\
+        \vidlink{https://github.com/EIC-Robocup-2026/walkie-ros}{walkie-ros}
+            & Walkie robot software: description and MuJoCo model, Nav2, MoveIt configuration with the
+              \texttt{whole\_body} group and executor, named worlds, and the full-body IK tool and
+              execution benchmark (\texttt{full\_body\_ik/}) \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small{Code repositories.}}
+    \label{tab:app_repos}
+\end{table}
+
+\paragraph{Offline IK benchmark (Section~\ref{sec:ik_bench}).} From the root of Coordinated-Base-Arm-Motion-Control:
+\begin{verbatim}
+uv sync
+uv run benchmark/run_benchmark.py    # experiments A, B, C
+uv run ik_sim/run_ik_sim.py B --record    # playback + keyframes
+\end{verbatim}
+
+\paragraph{Execution benchmark (Section~\ref{sec:exec_eval}).} From the root of walkie-ros, each command
+in its own terminal:
+\begin{verbatim}
+pixi run ros2 run rmw_zenoh_cpp rmw_zenohd
+pixi run ros2 launch robot_bringup nav_mujoco_omnibot.launch.py headless:=true
+pixi run ros2 launch openarm_bimanual_moveit_config moveit_only.launch.py \
+    hardware_type:=mujoco
+pixi run python -u full_body_ik/benchmark_execution.py --trials 15 --seed 1 \
+    --out full_body_ik/results
+\end{verbatim}
+The figure and the table rows are regenerated from the results with:
+\begin{verbatim}
+uv run report/final_draft/scripts/plot_execution.py \
+    ~/walkie-ros/full_body_ik/results/execution_runs.csv
+\end{verbatim}
+
+\paragraph{Interactive full-body IK tool (Section~\ref{sec:walkie}).} With the simulation and MoveIt
+running as above:
+\begin{verbatim}
+pixi run python full_body_ik/run_full_body_ik.py [--world chula_pat14_6]
+\end{verbatim}
+
+\section{Denavit--Hartenberg Parameters of the Walker Model}
+\label{app:dh}
+
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{ccccc}
+        \toprule
+        Link & $d$ (m) & $\theta$ (rad) & $a$ (m) & $\alpha$ (rad) \\
+        \midrule
+        1  & 0 & $-\pi/2$ & 0 & $-\pi/2$ \\
+        2  & $x^*$ & 0 & 0 & 0 \\
+        3  & 0 & 0 & 0 & $\pi/2$ \\
+        4  & 0 & $\pi/2$ & 0 & $-\pi/2$ \\
+        5  & $y^*$ & 0 & 0 & 0 \\
+        6  & 0 & 0 & 0 & $\pi/2$ \\
+        7  & $\mathrm{lift}^*$ & $\mathrm{\psi }^*$ & 0 & 0 \\
+        8  & 0.597 & 0 & 0 & 0 \\
+        9  & 0 & 0 & 0 & $-\pi/2$ \\
+        10 & 0.0915 & $q_{L_1}^*+\pi/2$ & 0 & 0 \\
+        11 & 0.061131 & 0 & 0 & $-\pi/2$ \\
+        12 & 0 & $q_{L_2}^*$ & 0.063 & 0 \\
+        13 & 0 & $-\pi/2$ & 0 & $-\pi/2$ \\
+        14 & 0.157 & $q_{L_3}^*+\pi/2$ & 0 & 0 \\
+        15 & 0 & 0 & 0 & $-\pi/2$ \\
+        16 & 0 & $q_{L_4}^*-\pi/2$ & 0 & 0 \\
+        17 & 0 & $\pi/2$ & 0 & $\pi/2$ \\
+        18 & 0.0965 & $q_{L_5}^*$ & 0 & 0 \\
+        19 & 0.1195 & $-\pi/2$ & 0 & $-\pi/2$ \\
+        20 & 0 & $q_{L_6}^*-\pi/2$ & 0 & 0 \\
+        21 & 0 & 0 & 0 & $-\pi/2$ \\
+        22 & 0 & $q_{L_7}^*$ & 0.114501 & 0 \\
+        23 & 0 & $-\pi/2$ & 0 & $-\pi/2$ \\
+        24 & 0 & $-\pi/2$ & 0 & 0 \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small{Standard Denavit--Hartenberg parameters of the unified mobile base--left arm Walker model (starred entries are joint variables).}}
+    \label{tab:app_dh}
+\end{table}
+
+\section{Solver and Execution Parameters}
+\label{app:params}
+
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{lll}
+        \toprule
+        Parameter & Walker model & Walkie \\
+        \midrule
+        Damping $\lambda_i$, base joints ($x$, $y$, $\psi$, lift) & 0.6 & 0.6 \\
+        Damping $\lambda_i$, arm joints & 0.2 & 0.2 \\
+        Joint-limit margin $m$ & 0.15 & 0.15 \\
+        Joint-limit penalty gain $g$ & 50 & 50 \\
+        Refinement passes $n_r$ & 2 & 2 \\
+        Orientation weight (m of position per rad) & 0.5 & 0.5 \\
+        Null-space gain $K$, arms (rest posture) & -- & 0.05 \\
+        Null-space gain $K$, base (current pose) & -- & 0.05 \\
+        Maximum joint step $s_{\max}$ per iteration & -- & 0.05 rad or m \\
+        IK and preview rate & -- & 100 Hz \\
+        Position / orientation tolerance (benchmarks) & 1 mm / 0.5$^\circ$ & 1 mm / 0.01 rad \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small{IK solver parameters.}}
+    \label{tab:app_ik_params}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{ll}
+        \toprule
+        Parameter & Value \\
+        \midrule
+        Whole-body radius, Eq.~(\ref{eq:exec_rule}) & 0.75 m \\
+        Nav2 approach distance / free-space clearance & 0.5 m / 0.3 m \\
+        Base sampling box margin around start and goal & 0.5 m \\
+        Map obstacle boxes (height) & 0.05--0.45 m \\
+        Executor rate / joint look-ahead & 50 Hz / 0.1 s \\
+        Base gains $K_p$ ($x$, $y$, $\psi$) & 1.5 s$^{-1}$ \\
+        Base speed limits & 0.5 m/s, 1.0 rad/s \\
+        Clock slow-down / stop error, $e_{\mathrm{slow}}$ / $e_{\mathrm{stop}}$ & 0.05 m / 0.15 m \\
+        Executor goal tolerance: base / joints & 2 cm, 0.02 rad / 0.05 rad \\
+        MoveIt velocity / acceleration scaling, planning time & 0.5 / 0.3, 5 s \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small{Execution parameters on the Walkie simulation.}}
+    \label{tab:app_exec_params}
+\end{table}
+
+\section{Additional Two-Arm IK Results}
+\label{app:bimanual}
+
+These results, from the second progress report, motivated the stacked solve and the null-space
+posture term of Section~\ref{sec:ik}. In the showcase pair, the left target is in front of the robot
+and the right target behind it on the right, so the base must move forward for one hand and backward
+for the other.
+
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{lcccc}
+        \toprule
+        Method & Iterations & Outcome & \shortstack{Final error\\L / R (mm)} & \shortstack{Distance from\\rest (rad)} \\
+        \midrule
+        1. Single arm (left + base) & 35 & reached & 1.0 & 0.17 \\
+        2. Averaged base step & 265 & stalled & 53.4 / 53.4 & 1.42 \\
+        3. Stacked, same rest weight & 205 & stalled & 16.7 / 16.7 & 1.60 \\
+        4. Stacked, weight $2\times10^{-5}$ & 40 & reached & 0.9 / 0.8 & 2.36 \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small{Showcase target pair (video V4).}}
+    \label{tab:app_showcase}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{lcccc}
+        \toprule
+        Method & Reached & \shortstack{Median\\iterations} & \shortstack{Final error (mm)\\median / max} &
+        \shortstack{Distance from\\rest, median (rad)} \\
+        \midrule
+        1. Single arm & 40/40 & 30 & 1.0 / 1.0 & 0.17 \\
+        2. Averaged & 1/40 & 292 & 36.2 / 229.7 & 1.09 \\
+        3. Stacked, same weight & 0/40 & 212 & 10.1 / 212.4 & 1.18 \\
+        4. Stacked, tiny weight & 37/40 & 30 & 0.9 / 210.1 & 1.77 \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small{Benchmark over 40 random target pairs.}}
+    \label{tab:app_bimanual40}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{llcc}
+        \toprule
+        Rest weight & Outcome & Final error (mm) & Distance from rest (rad) \\
+        \midrule
+        none & reached & $<1$ & 2.36 \\
+        $\le 10^{-4}$ & reached & $<1$ & 2.33--2.36 \\
+        $5\times10^{-4}$ & stalled & 2.4 & 1.69 \\
+        $4\times10^{-3}$ & stalled & 16.7 & 1.60 \\
+        $10^{-2}$ & stalled & 36.9 & 1.49 \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small{Effect of the soft rest weight on the stacked solver (showcase targets).}}
+    \label{tab:app_sweep}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{lcccc}
+        \toprule
+        Method & Reached & \shortstack{Median iter.\\to 1 mm} & \shortstack{Final error (mm)\\median / max} &
+        \shortstack{Distance from\\rest, median (rad)} \\
+        \midrule
+        Weighted rest pose & 0/32 & -- & 9.49 / 27.9 & 1.09 \\
+        Null space, no rest pose & 32/32 & 25 & 0.00 / 0.8 & 1.71 \\
+        Null-space rest pose & 31/32 & 25 & 0.02 / 1.9 & 1.20 \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small{Two-arm position-only IK on 32 targets (video V6).}}
+    \label{tab:app_nullspace}
+\end{table}
+
+\section{Per-Trial Execution Results}
+\label{app:exec_trials}
+
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{cccccc}
+        \toprule
+        Trial & \shortstack{Base goal\\distance (m)} & \shortstack{Time\\(s)} & \shortstack{Hand pos.\\error (mm)} &
+        \shortstack{Hand rot.\\error ($^\circ$)} & \shortstack{Base\\error (mm)} \\
+        \midrule
+        0 & 0.37 & 14.4 & 11.2 & 1.35 & 0.2 \\
+        1 & 0.27 & 4.5 & 10.8 & 1.41 & 1.2 \\
+        2 & 0.19 & 8.2 & 13.1 & 1.38 & 0.9 \\
+        3 & 0.24 & 12.9 & 12.0 & 1.37 & 0.5 \\
+        4 & 0.43 & 8.5 & 13.2 & 1.38 & 1.7 \\
+        5 & 0.40 & 5.8 & 12.0 & 1.39 & 1.1 \\
+        6 & 0.55 & 8.7 & 11.6 & 1.40 & 0.2 \\
+        7 & 0.28 & 4.3 & 10.8 & 1.40 & 1.5 \\
+        8 & 0.34 & 8.3 & 12.3 & 1.40 & 0.9 \\
+        9 & 0.37 & 4.2 & 11.8 & 1.33 & 1.6 \\
+        10 & 0.46 & 12.1 & 13.8 & 1.50 & 0.8 \\
+        11 & 0.23 & 4.1 & 11.5 & 1.41 & 1.1 \\
+        12 & 0.18 & 5.9 & 13.4 & 1.42 & 1.2 \\
+        13 & 0.53 & 12.8 & 12.5 & 1.38 & 0.9 \\
+        14 & 0.35 & 5.0 & 12.0 & 1.46 & 0.9 \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small{Whole-body execution per trial (Section~\ref{sec:exec_eval}). All 15 succeeded. Hand errors
+    are the larger of the left- and right-hand errors in each trial.}}
+    \label{tab:app_trials}
+\end{table}
+
+\section{Real-Robot Experiment Data}
+\label{app:real}
+
+\tbc
