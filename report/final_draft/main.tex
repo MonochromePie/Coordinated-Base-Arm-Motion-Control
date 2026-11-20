@@ -2177,30 +2177,34 @@ their results but not the spoken requests, so the requests are inferred from the
     \centering
     \small
     \renewcommand{\arraystretch}{1.15}
-    \begin{tabular}{c l r r r r}
+    \begin{tabular}{c l r c r r r}
         \toprule
-        Call & Command & Time (s) & $x$ (m) & $y$ (m) & Heading ($^\circ$) \\
+        Call & Command & Time (s) & Start $(x, y)$ (m) & $x$ (m) & $y$ (m) & Heading ($^\circ$) \\
         \midrule
-        1 & forward 0.5\,m & 8.1 & 0.04 & 0.01 & 0 \\
-        2 & forward 0.5\,m & 7.9 & 0.08 & $-0.01$ & 0 \\
-        \multicolumn{6}{l}{\textit{Both arms to hands\_up, home, standby and home; no base command}} \\
-        3 & turn 20$^\circ$ left & 2.4 & $-0.09$ & $-0.20$ & 14 \\
-        4 & turn 20$^\circ$ right & 2.2 & $-0.08$ & $-0.19$ & $-5$ \\
+        1 & forward 0.5\,m & 8.1 & $(-0.44, 0.01)$ & 0.04 & 0.01 & 0 \\
+        2 & forward 0.5\,m & 7.9 & $(-0.40, -0.01)$ & 0.08 & $-0.01$ & 0 \\
+        \multicolumn{7}{l}{\textit{Both arms to hands\_up, home, standby and home; no base command}} \\
+        3 & turn 20$^\circ$ left & 2.4 & $(-0.08, -0.20)$ & $-0.09$ & $-0.20$ & 14 \\
+        4 & turn 20$^\circ$ right & 2.2 & $(-0.08, -0.20)$ & $-0.08$ & $-0.19$ & $-5$ \\
         \bottomrule
     \end{tabular}
-    \caption{\small{The four base moves of the first agent session on the robot, with the pose that
-    \texttt{move\_relative} read back after each. Times are wall-clock durations of the tool calls.}}
+    \caption{\small{The four base moves of the first agent session on the robot: the position at
+    which Nav2 logged each move starting, and the pose that \texttt{move\_relative} read back after
+    it. Times are wall-clock durations of the tool calls.}}
     \label{tab:robot_session}
 \end{table}
 
-The poses that \texttt{move\_relative} read back did not match the commands. The second 0.5\,m
-forward move changed the reported $x$ by only 0.04\,m, and the first 20$^\circ$ turn changed the
-reported heading by 14$^\circ$. Between the reading after the second forward move and the one after the first turn, during which
-the arms moved and the base only turned in place, the reported position shifted by about 0.25\,m. The distances actually travelled were not
-measured independently, so the session does not show whether the base or the reported pose was
-wrong, and the cause, for example odometry error or a localisation correction, has not been
-determined. The pose read-back must be checked against an external measurement before base motion
-on the robot is evaluated.
+Read on their own, the poses that \texttt{move\_relative} returned suggest that the base did not
+move as commanded: after the second 0.5\,m forward move, the reported $x$ was only 0.04\,m greater
+than after the first. Nav2's own log of the session shows otherwise. Each forward move covered
+about 0.5\,m in the map frame, from $x=-0.44$ to 0.04\,m and from $-0.40$ to 0.08\,m, and ended
+within Nav2's 0.1\,m goal tolerance, but the second started
+0.44\,m behind the pose read after the first. Between those two calls, and again before the first
+turn, by about 0.25\,m, the base moved while no Nav2 goal was running and AMCL received no new pose
+estimate. It was therefore moved by something other than the agent, for example by joystick. The
+read-back agreed with Nav2's localisation. The distances were not measured independently, so the
+localisation itself must still be checked against an external measurement before base motion on
+the robot is evaluated.
 
 \paragraph{Preparation for whole-body tests.}
 For the commander's whole-body route, a launch file for the robot (\texttt{whole\_body\_real.launch.py})
