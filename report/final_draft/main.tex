@@ -361,11 +361,11 @@ skill fails, while all motion-level decisions stay in the control stack.
 \subsection{The Walkie Platform}
 
 The project extends Walkie, a mobile manipulator developed by the Engineer Innovator Club (EIC)
-at Chulalongkorn University for RoboCup@Home, where it placed 6th of 25 teams in 2026. Walkie
-has a four-wheel omnidirectional base, a vertical lift, and two 7-DOF OpenArm v10 arms with
-parallel grippers, a head with a stereo camera and 3D lidar, and front and rear planar lidars
-(Fig.~\ref{fig:walkie}). The project does not modify the hardware; it develops the
-motion-planning layer.
+at Chulalongkorn University for RoboCup@Home, where it placed 6th of 24 teams in 2026. Walkie
+has a four-wheel omnidirectional base, a vertical lift, and two 7-DOF OpenArm v1 arms with
+parallel grippers. For perception it carries a depth camera on the body, a 3D lidar on the head,
+and two 2D lidars on the base, one at the front and one at the rear (Fig.~\ref{fig:walkie}). The
+project does not modify the hardware; it develops the motion-planning layer.
 
 \begin{figure}[H]
     \centering
@@ -373,6 +373,26 @@ motion-planning layer.
     \caption{\small{Walkie and the EIC RoboCup@Home team.}}
     \label{fig:walkie}
 \end{figure}
+
+All three project members are part of the EIC RoboCup@Home team. Their roles in the team are
+listed in Table~\ref{tab:roles}.
+
+\begin{table}[H]
+    \centering
+    \caption{\small{Team roles of the project members.}}
+    \label{tab:roles}
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{lll}
+        \toprule
+        Member & RoboCup 2026 & RoboCup 2027 \\
+        \midrule
+        Supphakorn Akkapoo & Head of mechanical & RoboCup team president \\
+        Natapol Chusang & Software team & Software team lead \\
+        Taratorn Assawadejmetakul & RoboCup team president & President of EIC \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
 For planning, the robot is described by the joint-state vector
 \begin{equation}
@@ -391,16 +411,26 @@ the product of the base, lift, arm-mount and arm transforms,
 
 \subsection{Development Path}
 
-The work progressed through three simulation models, each closer to the real robot:
+The work used two simulation models: a stand-in model built while no simulation of Walkie was
+available, and later a model of the full robot. It progressed in three stages:
 \begin{enumerate}
-    \item \textbf{OpenArm with virtual base joints} (first progress report). An existing OpenArm
-          MuJoCo model was extended with virtual prismatic and revolute joints for the base
-          ($x$, $y$, lift, yaw) to test the unified kinematic model (Fig.~\ref{fig:early_models}a).
-    \item \textbf{Walker model with DH kinematics} (second progress report). Forward kinematics
-          was written as a Denavit--Hartenberg chain of the base and arm, and the IK solver was
-          developed and benchmarked on this model (Section~\ref{sec:ik}).
-    \item \textbf{Full Walkie simulation} (this report). The solver was moved onto the MuJoCo model
-          generated from Walkie's own robot description, running under ROS~2 with Nav2 and MoveIt
+    \item \textbf{Stand-in ``Walker'' model} (first progress report). No simulation model of
+          Walkie existed yet, so the existing bimanual OpenArm MuJoCo model was extended with
+          virtual joints for the base ($x$, $y$, lift, yaw), giving a single kinematic chain for
+          the base and both arms (Fig.~\ref{fig:early_models}a). MuJoCo was chosen over Gazebo
+          and Isaac Sim because this stage only needed fast kinematic experiments.
+    \item \textbf{IK solver on the Walker model, and a Walkie model in parallel} (second progress
+          report). Forward kinematics of the base and left arm was derived as a Standard
+          Denavit--Hartenberg chain, and the IK solver was developed on the Walker model: from the
+          Jacobian pseudoinverse through damped least squares, joint-limit damping and a rest
+          posture, to a stacked solve of both arms with the posture in the null space and a live
+          full-body IK interface (Section~\ref{sec:ik}). In parallel, the robot software was moved
+          to Pixi and a MuJoCo model of the full Walkie was generated from its robot description
+          and connected to ROS~2 and Nav2 (Fig.~\ref{fig:early_models}b). At that point the solver
+          was not yet connected to this model.
+    \item \textbf{Solver on the full Walkie simulation} (this report). The solver was moved onto the
+          Walkie MuJoCo model, with forward kinematics and Jacobians taken from the simulator model
+          instead of the DH tables, and its solutions are executed through Nav2 and MoveIt
           (Section~\ref{sec:walkie}).
 \end{enumerate}
 
@@ -409,7 +439,7 @@ The work progressed through three simulation models, each closer to the real rob
     \begin{subfigure}[t]{0.48\textwidth}
         \centering
         \includegraphics[height=4.6cm]{Mujoco_walker.png}
-        \caption{OpenArm with virtual base joints}
+        \caption{Walker model: OpenArm with virtual base joints}
     \end{subfigure}\hfill
     \begin{subfigure}[t]{0.48\textwidth}
         \centering
@@ -532,14 +562,60 @@ weighted by $w_i\ge 1$ when it moves towards a limit:
     \mathbf{W}=\operatorname{diag}(w_i).
     \label{eq:weighted_dls}
 \end{equation}
-With $d_i$ the normalised distance of joint $i$ to the limit it is heading towards, $m$ the margin
-(as a fraction of the joint range) and $g$ a gain,
+For a joint with range $[q_i^{\min},q_i^{\max}]$, the normalised distance to the limit it is heading
+towards is
+\begin{equation}
+    d_i =
+    \begin{cases}
+        \dfrac{q_i^{\max}-q_i}{q_i^{\max}-q_i^{\min}}, & \Delta q_i \ge 0\\[2ex]
+        \dfrac{q_i-q_i^{\min}}{q_i^{\max}-q_i^{\min}}, & \Delta q_i < 0
+    \end{cases}
+    \label{eq:limit_dist}
+\end{equation}
+With $m$ the width of the margin zone as a fraction of the joint range (Fig.~\ref{fig:margin_zone}),
+$g$ a gain and $\varepsilon$ a small constant that prevents division by zero,
 \begin{equation}
     p_i=\operatorname{clip}\!\left(\frac{m-d_i}{m},0,1\right),
     \qquad
     w_i=1+g\,\frac{p_i^2}{1-p_i+\varepsilon}.
     \label{eq:limit_weight}
 \end{equation}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[>=stealth, font=\small]
+        % joint range split into penalty / free / penalty zones (m = 0.15 drawn to scale)
+        \fill[red!15]   (0,0)   rectangle (1.5,0.6);
+        \fill[green!12] (1.5,0) rectangle (8.5,0.6);
+        \fill[red!15]   (8.5,0) rectangle (10,0.6);
+        \draw (0,0) rectangle (10,0.6);
+        \draw (1.5,0) -- (1.5,0.6);
+        \draw (8.5,0) -- (8.5,0.6);
+        \node at (0.75,0.3) {\footnotesize penalty};
+        \node at (5,0.3)    {free zone ($w_i=1$)};
+        \node at (9.25,0.3) {\footnotesize penalty};
+        % joint limits
+        \node[below] at (0,0)  {$q_i^{\min}$};
+        \node[below] at (10,0) {$q_i^{\max}$};
+        % zone widths
+        \draw[<->] (0,-0.85)   -- (1.5,-0.85);
+        \draw[<->] (8.5,-0.85) -- (10,-0.85);
+        \node[below] at (0.75,-0.85) {$m\,(q_i^{\max}-q_i^{\min})$};
+        \node[below] at (9.25,-0.85) {$m\,(q_i^{\max}-q_i^{\min})$};
+        % schematic weight profile above the bar
+        \draw[dashed, gray] (0,1.0) -- (10,1.0);
+        \draw[thick, blue!70!black, domain=0.05:1.5, samples=40, smooth, variable=\x]
+            plot ({\x},{1+0.35*((1.5-\x)/1.5)^2/(1-(1.5-\x)/1.5+0.25)});
+        \draw[thick, blue!70!black, domain=0.05:1.5, samples=40, smooth, variable=\x]
+            plot ({10-\x},{1+0.35*((1.5-\x)/1.5)^2/(1-(1.5-\x)/1.5+0.25)});
+        \node[blue!70!black] at (5,1.35) {weight $w_i$ (schematic)};
+    \end{tikzpicture}
+    \caption{\small{Margin zone of a joint with limits $[q_i^{\min},q_i^{\max}]$, drawn for $m=0.15$.
+    The weight $w_i$ equals 1 in the free zone and rises steeply toward the limit the joint is
+    approaching.}}
+    \label{fig:margin_zone}
+\end{figure}
+
 Outside the margin, or when moving away from the limit, $w_i=1$; at the limit the joint is
 effectively frozen. Because $w_i$ depends on the sign of $\Delta q_i$, the system is solved
 $n_r=2$ times, each time recomputing $\mathbf{W}$ from the previous step, and the result is clipped
@@ -808,7 +884,15 @@ link to a demonstration video.}
 \subsection{Execution Through Nav2 and MoveIt}
 
 The IK solution $\mathbf{q}^{*}$ is a goal configuration, not a trajectory: it says where the base,
-lift and arms should end, but not how to get there without collisions. Three ways of executing it were
+lift and arms should end, but not how to get there without collisions.
+
+The execution described here uses Nav2 and MoveIt (with its default RRT-Connect planner) as a testing
+ground. They provide working collision checking and motion planning on the full robot, so the IK
+solutions and the whole-body executor can be tested in the simulator while the path-planning method is
+still being researched (Section~\ref{sec:planning}). They are used for experimentation and are not the
+final planning layer; the method selected from that research is intended to take their place.
+
+Three ways of executing it were
 implemented, chosen from the distance $d=\|(x^*,y^*)-(x,y)\|$ between the current and goal base
 positions:
 \begin{equation}
@@ -856,11 +940,8 @@ contact, lags its reference.
 
 \paragraph{Far goals.}
 For base goals beyond 0.75\,m, Nav2 first drives the base to an approach pose 0.5\,m from the goal
-with the goal's heading, choosing the closest point on that circle with 0.3\,m of free map around it,
-while the arms move to a compact travel pose. The whole-body plan then covers the last part. The
-travel pose is the mirrored pose $(0.69,-0.25,0.11,1.92,0,0,-1.57)$, except that the right shoulder
-uses $-0.60$\,rad: the exact mirror touches a column on the right side of the base collision model by
-2\,mm.
+with the goal's heading, choosing the closest point on that circle with 0.3\,m of free map around it.
+The whole-body plan then covers the last part.
 
 \paragraph{Lift and arms only.}
 When the base does not move, the lift and arms go to MoveIt's hybrid planning: a global planner
@@ -882,7 +963,7 @@ a combined 15-joint trajectory that the per-arm controllers reject, and a crash 
         \node[box=5.0cm, fill=orange!12] (dec) at (0,-2.1) {Execute: choose path from\\base distance $d$, Eq.~(\ref{eq:exec_rule})};
         \node[box, fill=green!10] (hyb) at (-4.6,-4.2) {MoveIt hybrid planning\\(lift + arms)};
         \node[box, fill=green!10] (wb) at (0,-4.2) {MoveIt plan, group \texttt{whole\_body}, + map boxes};
-        \node[box, fill=green!10] (nav) at (4.6,-4.2) {Nav2 approach\\+ arms to travel pose};
+        \node[box, fill=green!10] (nav) at (4.6,-4.2) {Nav2 approach\\to 0.5\,m from goal};
         \node[box=5.2cm, fill=green!10] (exe) at (0,-6.2) {Whole-body executor\\(base \texttt{cmd\_vel} + arms on one clock)};
         \node[box=6.0cm, fill=gray!10] (sim) at (0,-8.0) {Walkie in MuJoCo (\texttt{mujoco\_ros2\_control})};
         \draw[->] (gui) -- (ik);
