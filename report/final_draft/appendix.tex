@@ -52,7 +52,20 @@
         \vidlink{https://github.com/EIC-Robocup-2026/walkie-ros}{walkie-ros}
             & Walkie robot software: description and MuJoCo model, Nav2, MoveIt configuration with the
               \texttt{whole\_body} group and executor, named worlds, and the full-body IK tool and
-              execution benchmark (\texttt{full\_body\_ik/}) \\
+              execution benchmark (\texttt{full\_body\_ik/}). Branch \texttt{feat/moveit-full-body}
+              (\texttt{1da4535}) adds the commander's whole-body goals and the launch file and guide
+              for the real robot; \texttt{feat/sim-bottle-pick} (\texttt{e31c1bf}) builds on it and
+              adds the scripted bottle pick \\
+        \vidlink{https://github.com/EIC-Robocup-2026/walkie-agent-ros}{walkie-agent-ros}
+            & Task-level agent: typed tools including \texttt{pick\_object}, voice input and output,
+              the simulation oracle for people, and the runbook for the real robot. Branch
+              \texttt{feat/mahoraga-demo} (\texttt{dd49c1d}) \\
+        \vidlink{https://github.com/EIC-Robocup-2026/walkie-vision}{walkie-vision}
+            & Perception from the head camera: people, and open-vocabulary objects with YOLOE. Branch
+              \texttt{feat/scene-graph-prep} (\texttt{ad7c833}) \\
+        \vidlink{https://github.com/EIC-Robocup-2026/walkie-database}{walkie-database}
+            & Memory of people and of perceived objects, read by the agent. Branch
+              \texttt{feat/scene-graph-prep} (\texttt{41dae92}) \\
         \bottomrule
     \end{tabular}
     \caption{\small{Code repositories.}}
@@ -87,6 +100,42 @@ running as above:
 \begin{verbatim}
 pixi run python full_body_ik/run_full_body_ik.py [--world chula_pat14_6]
 \end{verbatim}
+
+\paragraph{Whole-body goals in the commander (Section~\ref{sec:commander_results}).} From the root of
+walkie-ros on branch \texttt{feat/sim-bottle-pick}, each command in its own terminal:
+\begin{verbatim}
+pixi run ros2 launch robot_bringup whole_body_demo.launch.py
+pixi run ros2 run openarm_bimanual_commander_cpp whole_body_demo
+\end{verbatim}
+The launch file starts the test scene, Nav2 (which owns the collision monitor), \texttt{move\_group},
+the commander, the base follower, RViz and a Zenoh router. \texttt{headless:=true} with
+\texttt{use\_rviz:=false} runs it without windows, and \texttt{start\_router:=false} uses a router that is already running. The
+demo client takes \texttt{--cycles} \textit{N} for repeated round trips and \texttt{--report}
+\textit{file} to write its report to a file.
+
+\paragraph{Scripted bottle pick (Section~\ref{sec:pick}).} From the same checkout, on a Zenoh router
+and ROS domain of its own (port 7511 and domain 81 are an example). The router, in a first terminal:
+\begin{verbatim}
+export ROS_DOMAIN_ID=81
+unset ZENOH_ROUTER_CONFIG_URI ZENOH_SESSION_CONFIG_URI
+export ZENOH_CONFIG_OVERRIDE=\
+'listen/endpoints=["tcp/localhost:7511"];connect/endpoints=[]'
+pixi run ros2 run rmw_zenoh_cpp rmw_zenohd
+\end{verbatim}
+First in each of two further terminals:
+\begin{verbatim}
+export ROS_DOMAIN_ID=81
+unset ZENOH_ROUTER_CONFIG_URI ZENOH_SESSION_CONFIG_URI
+export ZENOH_CONFIG_OVERRIDE='connect/endpoints=["tcp/localhost:7511"]'
+\end{verbatim}
+then the simulation in one and the pick in the other:
+\begin{verbatim}
+pixi run ros2 launch robot_bringup whole_body_demo.launch.py \
+    world:=chula_pat14_6 start_router:=false
+pixi run ros2 run robot_bringup sim_bottle_pick.py \
+    --report /tmp/pick.json
+\end{verbatim}
+The pick runs once per launch; restart the launch to put the bottle back on the table.
 
 \section{Denavit--Hartenberg Parameters of the Walker Model}
 \label{app:dh}

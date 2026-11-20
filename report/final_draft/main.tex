@@ -132,8 +132,17 @@ soft-weight formulation reaches none. On the full Walkie simulation (MuJoCo, ROS
 MoveIt~2), the solution is executed as a single collision-checked whole-body trajectory of base,
 lift and arms. In a simulation benchmark of 15 two-hand targets, this whole-body execution
 succeeded in all trials, with the base within 2\,mm and the hands within 14\,mm of their targets.
-Sampling-based path planning (the RRT family), the general task skills, real-robot validation
-and the VLA branch are in progress.
+A second whole-body route was added to the robot's MoveIt commander. It plans the base, the lift and
+one arm together: candidate base poses are sampled, solved with IK and ranked by a weighted motion
+cost. In simulated demonstrations, these goals moved the base by about 1\,m to reach targets
+beyond the arm's reach, with a largest hand error of 13.3--21.7\,mm per run. A pick skill built on
+this route is exposed to the agent. In a simulated reconstruction of a real room, the agent picked
+up a water bottle in the kitchen and drove to the living room to hand it over. Over development runs
+with code changes between them, 4 of 10 agent pick attempts succeeded, each with the base standing
+still while the arm reached. On the real robot, the agent has so far been commanded by voice to
+speak, to make short base moves and to move the arms to stored poses; no whole-body motion has yet
+run on the hardware. Sampling-based path planning (the RRT family), the place, point and carry
+skills, whole-body validation on the real robot and the VLA branch are in progress.
 
 \clearpage
 \tableofcontents
@@ -199,16 +208,22 @@ should own and how the two are combined on one robot.
 
 \subsection{Scope of This Draft and Report Structure}
 
-This draft documents the work completed up to November 2026. Section~\ref{sec:arch} describes
-the hybrid architecture and how tasks are routed between the agent, traditional control and the VLA
-branch. Section~\ref{sec:platform} describes the Walkie platform and the software and simulation
-infrastructure. Section~\ref{sec:ik} presents the development of the whole-body IK solver and its
-offline evaluation. Section~\ref{sec:walkie} describes how the solver was integrated into the full
-Walkie simulation with Nav2 and MoveIt, and Section~\ref{sec:exec_eval} evaluates how accurately its solutions
-are executed. Section~\ref{sec:planning} covers the path-planning work in progress (the RRT family),
-and Section~\ref{sec:skills} example scenarios of the agent using these skills. Section~\ref{sec:real} is reserved for
-real-robot experiments, Section~\ref{sec:vla} for the VLA branch, and Section~\ref{sec:discussion}
-discusses the outcomes so far against the objectives.
+This draft documents the work completed up to November 2026. Section~\ref{sec:lit} reviews related
+work, and Section~\ref{sec:arch} describes the hybrid architecture and how tasks are routed between
+the agent, traditional control and the VLA branch. Section~\ref{sec:platform} describes the Walkie
+platform and the software and simulation infrastructure. Section~\ref{sec:ik} presents the
+development of the whole-body IK solver and its offline evaluation. Section~\ref{sec:walkie}
+describes how the solver was integrated into the full Walkie simulation with Nav2 and MoveIt, and
+Section~\ref{sec:commander} a second whole-body route in the robot's MoveIt commander.
+Section~\ref{sec:exec_eval} evaluates how accurately the solver's solutions are executed,
+Section~\ref{sec:commander_results} reports the commander's whole-body goals in simulation, and
+Section~\ref{sec:pick} a pick skill that is built on the commander and called by the agent.
+Section~\ref{sec:planning} covers the path-planning work in progress (the RRT family), and
+Section~\ref{sec:skills} scenarios of the agent reasoning over these skills. Section~\ref{sec:real}
+reports a first voice-commanded session of the agent on the real robot and the preparation for
+whole-body tests on it, and Section~\ref{sec:vla} is reserved for the VLA branch.
+Section~\ref{sec:discussion} discusses the outcomes so far against the objectives, and
+Section~\ref{sec:conclusion} concludes.
 
 % ============================================================
 \section{Literature Review}
@@ -258,7 +273,7 @@ plans loosely coupled base and arm trajectories in real time among obstacles of 
 \subsection{Grasp Generation and Perception}
 
 Learned 6-DoF grasp generators such as Contact-GraspNet~\cite{sundermeyer2021contact} and
-GraspGen~\cite{murali2026graspgen} propose grasp candidates from point clouds, and
+GraspGen~\cite{murali2026graspgen} predict grasps from point clouds, and
 open-vocabulary detectors such as YOLOE~\cite{wang2025yoloe} localise objects from text prompts.
 They decide \emph{where} to grasp, but not how the robot should move to reach that grasp, which is
 the role of the whole-body planner.
@@ -288,25 +303,31 @@ controllers are the same in every case.
                     execute at begin node=\setlength{\baselineskip}{1.15em}},
         box/.default=3.4cm]
         \node[box=4.2cm, fill=gray!10] (cmd) at (0,0) {Request (speech or text)\\e.g.\ ``bring the cup to the sofa''};
-        \node[box=6.2cm, fill=blue!8] (agent) at (0,-1.9) {Task-level agent (LLM, ReAct)\\decomposes the request, selects and sequences skills, checks results};
-        \node[box=3.2cm, fill=gray!10] (perc) at (-6.2,-1.9) {Perception and\\object memory};
-        \node[box=5.6cm, fill=green!10] (trad) at (-3.2,-4.2) {Traditional skills (geometric goals)\\navigate, pick, place, point, carry bag};
+        \node[box=6.2cm, fill=blue!8] (agent) at (0,-1.9) {Task-level agent (LLM with tools)\\decomposes the request, selects and sequences skills, checks results};
+        \node[box=3.7cm, fill=gray!10] (perc) at (-6.6,-1.2) {Perception and\\object memory\\YOLOE objects\\(walkie-vision)\\+ oracle people (sim)};
+        \node[box=3.4cm, fill=green!10, minimum height=16mm] (trad) at (-4.5,-4.2) {Traditional skills\\(geometric goals)\\navigate, pick (sim)};
+        \node[box=2.3cm, fill=green!10, dashed, minimum height=16mm] (todo) at (-1.17,-4.2) {Not yet built\\place, point,\\carry bag};
         \node[box=4.4cm, fill=orange!12, dashed] (vla) at (3.6,-4.2) {VLA skills (hard to model)\\e.g.\ laundry};
         \node[box=5.6cm, fill=green!10] (wb) at (-3.2,-6.2) {Whole-body IK, MoveIt whole-body plan\\+ executor, Nav2 (Sections~\ref{sec:ik}--\ref{sec:planning})};
         \node[box=4.4cm, fill=orange!12, dashed] (pol) at (3.6,-6.2) {VLA policy\\(Section~\ref{sec:vla})};
         \node[box=8.0cm, fill=gray!10] (robot) at (0,-8.0) {Walkie controllers (ros2\_control): base, lift, arms, grippers\\real robot or MuJoCo};
         \draw[->] (cmd) -- (agent);
-        \draw[<->] (perc) -- (agent);
-        \draw[->] ([xshift=-1.6cm]agent.south) -- node[pos=0.45, left, font=\scriptsize]{geometric goal} (trad.north);
-        \draw[->] ([xshift=1.6cm]agent.south) -- node[pos=0.45, right, font=\scriptsize]{no explicit model} (vla.north);
-        \draw[->] (trad) -- (wb);
+        \draw[<->] (perc.east |- agent.west) -- (agent.west);
+        \draw[->] ([xshift=-2.4cm]agent.south) -- node[pos=0.75, above left, font=\scriptsize]{geometric goal} (trad.north);
+        \draw[->, dashed] (todo.north |- agent.south) -- (todo.north);
+        \draw[->] ([xshift=1.6cm]agent.south) -- node[pos=0.75, above right, font=\scriptsize]{no explicit model} (vla.north);
+        \draw[->] (trad.south) -- (trad.south |- wb.north);
+        \draw[->, dashed] (todo.south) -- (todo.south |- wb.north);
         \draw[->] (vla) -- (pol);
         \draw[->] (wb) -- (robot.north -| wb);
         \draw[->] (pol) -- (robot.north -| pol);
         \draw[->, dashed] (perc.south west) ++(0.3,0) |- ([yshift=-1mm]wb.west);
     \end{tikzpicture}
     \caption{\small{Hybrid architecture: the agent routes each skill to traditional coordinated base--arm
-    control or to the VLA branch. Dashed boxes are in progress.}}
+    control or to the VLA branch. Of the traditional skills, navigation and picking are built; picking has run
+    only in simulation. Placing, pointing and carrying a bag are not built yet. Objects come from YOLOE
+    detections (walkie-vision) kept in the walkie-database object memory; in simulation, people are read from
+    the simulator's ground truth (oracle). Dashed boxes are not built yet or in progress.}}
     \label{fig:arch}
 \end{figure}
 
@@ -341,18 +362,159 @@ These are better handled by a VLA policy that has learned the task from demonstr
 \end{table}
 
 \subsection{Task-Level Agent}
+\label{sec:agent}
 
 Task-level control was restructured from \texttt{walkie-agent-v2}, a LangChain/LangGraph multi-agent
-application, into \texttt{walkie-agent-ros}, a ROS~2 node built on RAI's ReAct agent whose tools talk
-to the robot through ROS topics, services and actions. It uses the same Pixi environment as the robot
-software, accepts text or speech requests, and currently provides tools for speech, named-location
-navigation (Nav2 goals with bounded waits and cancellation on timeout), bounded relative motion, pose
-lookup and object-memory queries, with tests against a fake robot and a scripted language model. A
-successor (\emph{Mahoraga}) that maintains an explicit task plan and discovers and composes typed
-tools has been designed. In this architecture, the manipulation skills of Section~\ref{sec:skills} are
-exposed to the agent as typed tools with explicit failure results (for example \emph{unreachable},
-\emph{plan failed} or \emph{grasp not detected}), so the agent can re-plan at the task level when a
-skill fails, while all motion-level decisions stay in the control stack.
+application, into \texttt{walkie-agent-ros}, a ROS~2 node whose tools talk to the robot through ROS
+topics, services and actions. It uses the same Pixi environment as the robot software and accepts text
+or speech requests. The agent loop is LangChain's \texttt{create\_agent}~\cite{langchain}: the language
+model is called, the tools it selects are run, and their results are returned to it until it gives a
+final answer. A stack of middleware around this loop runs one request at a time, handles stop
+requests, limits the number of model calls and the time per request, and turns an exception raised by a
+tool into a result the model can read. RAI\footnote{\url{https://github.com/RobotecAI/rai}} is kept only
+for the ROS~2 connection and for the speech-recognition and text-to-speech nodes. The tools are tested
+against a fake robot backend.
+
+Each tool is a Python function. Its schema is built from the function's signature and docstring and is
+validated strictly. The arguments are names or short texts, such as a place name, an object name, a
+person identifier or a named arm pose; positions, poses and joint values never reach the model.
+Table~\ref{tab:agent_tools} lists the tools bound in the simulation pick runs. The navigation tools send
+Nav2 goals~\cite{nav2} with bounded waits and cancel a goal on timeout, and \texttt{move\_relative}
+refuses a move longer than 3.0\,m. The arm tools call the MoveIt commander of Section~\ref{sec:commander}.
+Two tools, \texttt{update\_todos} and \texttt{wait\_for\_person}, are supplied by the agent runtime
+rather than by a tool module. The general pick-and-place tools of another tool set (\texttt{pick},
+\texttt{place\_on} and \texttt{hand\_over}) have no robot implementation yet and answer
+\texttt{UNAVAILABLE}.
+
+\begin{table}[H]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{@{}p{0.15\linewidth} p{0.42\linewidth} p{0.35\linewidth}@{}}
+        \toprule
+        Group & Tools & Served by \tabularnewline
+        \midrule
+        Navigation & \raggedright \texttt{list\_places}, \texttt{go\_to}, \texttt{go\_to\_object},
+            \texttt{move\_relative}, \texttt{face\_person} & \raggedright Nav2 \tabularnewline
+        Speech & \raggedright \texttt{say} & \raggedright Text-to-speech node \tabularnewline
+        Perception & \raggedright \texttt{find\_objects}, \texttt{find\_people} & \raggedright YOLOE
+            detections (\texttt{walkie-vision}); simulator ground truth for people \tabularnewline
+        Memory & \raggedright \texttt{recall\_object}, \texttt{list\_room\_objects}, \texttt{remember\_person},
+            \texttt{recognize\_person} & \raggedright Object memory (\texttt{walkie-database}); people memory
+            not enabled in the logged run \tabularnewline
+        Arms & \raggedright \texttt{list\_arm\_poses}, \texttt{move\_arm\_to\_pose}, \texttt{set\_gripper},
+            \texttt{get\_arm\_state} & \raggedright MoveIt commander \tabularnewline
+        Manipulation & \raggedright \texttt{pick\_object} & \raggedright Figure~\ref{fig:pick_flow}
+            \tabularnewline
+        Runtime & \raggedright \texttt{update\_todos}, \texttt{wait\_for\_person} & \raggedright Agent
+            middleware \tabularnewline
+        \bottomrule
+    \end{tabular}
+    \caption{\small{Tools bound in the simulation pick runs: the human--robot interaction tool set with the
+    arm and object-memory options. The last two are supplied by the agent runtime.}}
+    \label{tab:agent_tools}
+\end{table}
+
+A tool that cannot complete raises a \texttt{StepError} with one of eight codes, and the model reads it as
+a result of the form \texttt{CODE: message}. The codes are \texttt{UNAVAILABLE} (a backend, server or
+topic is missing), \texttt{TIMEOUT}, \texttt{NOT\_FOUND} (an unknown place, object or person),
+\texttt{REFUSED} (a rule forbids the request, such as a move beyond the cap),
+\texttt{PRECONDITION\_FAILED} (the robot is not in the required state), \texttt{SKILL\_FAILED} (a robot
+motion ran and failed), \texttt{CANCELLED} (a stop or reset interrupted the step) and \texttt{INTERNAL}
+(a fault in the tool). Answers from the arm tools end with a sentence that states whether the arms are
+safe for driving. The system prompt tells the model to call \texttt{get\_arm\_state} after an arm
+failure and to retry at most once, and never to compose a pick from arm poses and gripper commands.
+Recovery is therefore a task-level decision: the model may retry, choose another object, ask a person or
+report the failure, while every motion-level decision stays in the control stack.
+
+The runtime also keeps an explicit step list for each request. The model writes it with
+\texttt{update\_todos}, and the runtime checks every update: at most one step is in progress or waiting,
+a failed or cancelled step carries a note, steps seeded by a scenario keep their wording and order, and a
+step cannot be marked complete while a failure within it is unresolved or before a tool that the step
+requires has succeeded. \texttt{wait\_for\_person} speaks a question and ends the run, so the answer
+arrives as the next request. In the simulation runs, the operator typed these answers.
+
+The \texttt{pick\_object} tool (Figure~\ref{fig:pick_flow}) exposes a complete pick as one call whose
+only argument is the object's name. It takes the object's position from the object memory, in which
+\texttt{walkie-database} keeps YOLOE~\cite{wang2025yoloe} detections from \texttt{walkie-vision}. When
+the stand-off pose is more than one relative move (3.0\,m) away, the tool first drives to the named
+place nearest the object. It then drives the base through Nav2 to a stand-off pose 0.65\,m from the
+object and 0.20\,m to the left of the approach line, trying up to eight approach headings. The arm
+sequence runs through the MoveIt commander. The left arm is tucked, the right hand opens, a whole-body
+goal brings the hand to a pre-grasp pose 0.10\,m behind the grasp pose, a straight Cartesian approach
+moves the hand in, and the gripper closes. The commander's grasp detection then judges from the finger
+opening whether the hand holds the object. If it does not, the arms return home and the call fails with
+\texttt{SKILL\_FAILED}. Otherwise the hand lifts 0.10\,m, moves to beside the base, and both arms return
+home. The object is read from the memory again after the drive, before the reach and before the
+approach. Each reading must be at most 5\,s old and within 0.15\,m of the previous one. After the drive
+and before the reach, the object and every hand target must also lie inside the arm's reach envelope. A
+refused check or a failed step sends no further goal.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        >=Stealth, font=\small, node distance=3mm,
+        step/.style={draw, rounded corners=2pt, align=center, fill=green!10, minimum height=13mm,
+                     text width=#1, inner sep=3pt,
+                     execute at begin node=\setlength{\baselineskip}{1.1em}},
+        chk/.style={draw, circle, fill=orange!25, inner sep=0pt, minimum size=5mm, font=\scriptsize\bfseries},
+        txt/.style={align=left, inner sep=3pt, execute at begin node=\setlength{\baselineskip}{1.1em}}]
+        % Row 1: memory, drive, first checkpoint, arm preparation, second checkpoint.
+        \node[step=2.5cm] (recall) at (0,0) {Recall object\\{\scriptsize object memory}};
+        \node[step=3.1cm, right=of recall] (drive) {Drive to stand-off\\{\scriptsize Nav2, up to eight}\\[-1pt]{\scriptsize approach headings}};
+        \node[chk, right=of drive] (c1) {1};
+        \node[step=2.9cm, right=of c1] (ready) {Tuck left arm,\\open right hand};
+        \node[chk, right=of ready] (c2) {2};
+        % Row 2: whole-body reach, third checkpoint, approach, grasp, lift and home.
+        \node[step=3.1cm, below=11mm of recall.south west, anchor=north west] (reach)
+            {Whole-body reach\\to pre-grasp\\{\scriptsize\texttt{whole\_body\_right}}};
+        \node[chk, right=of reach] (c3) {3};
+        \node[step=3.05cm, right=of c3] (approach) {Straight approach\\{\scriptsize\texttt{right\_arm\_lift}}};
+        \node[step=2.6cm, right=of approach] (close) {Close gripper,\\check the hold};
+        \node[step=2.9cm, right=of close] (home) {Lift, move clear,\\both arms home};
+        \draw[->] (recall) -- (drive);
+        \draw[->] (drive) -- (c1);
+        \draw[->] (c1) -- (ready);
+        \draw[->] (ready) -- (c2);
+        \draw[->] (c2.south) |- ([yshift=-5.5mm]ready.south) -| (reach.north);
+        \draw[->] (reach) -- (c3);
+        \draw[->] (c3) -- (approach);
+        \draw[->] (approach) -- (close);
+        \draw[->] (close) -- (home);
+        % The tool boundary: everything inside runs as one tool call.
+        \node[draw, dashed, rounded corners=3pt, inner sep=2.5mm, fit=(recall)(c2)(reach)(home)] (tool) {};
+        \node[txt, font=\scriptsize, text width=2.6cm, anchor=north east] at ([xshift=-1mm,yshift=-1.5mm]tool.north east)
+            {One \texttt{pick\_object} call, hidden from the LLM.\\[2pt]
+             Circles: the object is read from the memory again.};
+        % The LLM and the sentence it reads back.
+        \node[draw, rounded corners=2pt, fill=gray!10, txt, font=\scriptsize, text width=9.4cm,
+              anchor=south east] (result) at ([yshift=8mm]tool.north east)
+            {Returns one sentence. Recorded examples:\\
+             \texttt{Picked up the bottle with the right hand, lifted it and brought both arms home. Arms: safe for driving.}\\
+             \texttt{SKILL\_FAILED: The approach to the bottle failed: [\dots] MoveIt found no path for right\_arm (Planning Failed). [\dots] Arms: not safe for driving.}};
+        \node[draw, rounded corners=2pt, fill=blue!8, align=center, text width=3.0cm, inner sep=3pt,
+              execute at begin node=\setlength{\baselineskip}{1.1em}]
+            (llm) at (result.west -| recall.center) {Task-level agent\\(LLM)};
+        \draw[->] (llm.south) -- node[right, font=\scriptsize]{\texttt{pick\_object(name)}} (llm.south |- tool.north);
+        \draw[->] (tool.north -| result.south) -- (result.south);
+        \draw[->] (result.west) -- (llm.east);
+    \end{tikzpicture}
+    \caption{\small{The pick skill as the agent sees it. The LLM names an object and reads back one
+    sentence, a success or a coded failure (recorded examples shown). Inside the call, agent code drives the
+    base through Nav2 and the arms through the MoveIt commander. At circles 1--3 the object is read from the
+    memory again, and a refused check or a failed step sends no further goal. The pick has run only in
+    simulation.}}
+    \label{fig:pick_flow}
+\end{figure}
+
+The whole-body goal first tries the reach with the base where it stands, and samples other base poses
+only if that fails. In every successful pick recorded so far by the agent in simulation, the commander
+reached the pre-grasp pose with the base fixed. The base and the arms therefore moved one after the
+other rather than together. These are development runs (Section~\ref{sec:pick}). The pick settings
+have not been tried on the robot, and the pick has not been run on the real robot.
+
+A successor design, \emph{Mahoraga}, in which the model composes typed robot calls into short scripts,
+exists only as a prototype. It was not used in the runs reported here and has not been evaluated.
 
 % ============================================================
 \section{Platform, Software and Simulation}
@@ -369,8 +531,17 @@ project does not modify the hardware; it develops the motion-planning layer.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.62\linewidth]{DSC06194.jpg}
-    \caption{\small{Walkie and the EIC RoboCup@Home team.}}
+    \begin{subfigure}[t]{0.56\textwidth}
+        \centering
+        \includegraphics[height=5.4cm]{DSC06194.jpg}
+        \caption{Walkie and the EIC RoboCup@Home team}
+    \end{subfigure}\hfill
+    \begin{subfigure}[t]{0.40\textwidth}
+        \centering
+        \includegraphics[height=5.4cm]{walkie_arms.jpg}
+        \caption{Upper body: the two OpenArm arms with parallel grippers and the stereo camera}
+    \end{subfigure}
+    \caption{\small{The Walkie mobile manipulator.}}
     \label{fig:walkie}
 \end{figure}
 
@@ -487,6 +658,13 @@ every installed world.
         \includegraphics[height=5cm]{chula_map_alignment.png}
         \caption{World geometry over its Nav2 map}
     \end{subfigure}
+    \par\medskip
+    \begin{subfigure}[t]{0.60\textwidth}
+        \centering
+        \includegraphics[height=5cm]{chula_kitchen.png}
+        \caption{The kitchen with the task objects}
+    \end{subfigure}
+
     \caption{\small{The Chulapat~14 named world.}}
     \label{fig:world}
 \end{figure}
@@ -982,6 +1160,181 @@ a combined 15-joint trajectory that the per-arm controllers reject, and a crash 
     \label{fig:pipeline}
 \end{figure}
 
+\subsection{Whole-Body Goals in the MoveIt Commander}
+\label{sec:commander}
+
+% Sources: walkie-ros docs/migrations/07-whole-body-moveit.md:12-50 and docs/guides/manipulation.md:339-402,
+% 783-967, 1004-1220; whole_body_goal.hpp; whole_body_option.hpp:834-855, 1023-1180.
+The pipeline of Fig.~\ref{fig:pipeline} is the route of the \texttt{full\_body\_ik} tool. A second
+whole-body route was added to the robot's MoveIt commander (\texttt{openarm\_bimanual\_commander\_cpp}
+in \texttt{walkie-ros}), the C++ node that serves arm goals to the rest of the software. It is used by
+callers that send goals over ROS: the agent's \texttt{pick\_object} tool, a scripted bottle pick in
+simulation and a hand target that can be dragged in RViz. Figure~\ref{fig:commander_pipeline} shows
+this route, and Table~\ref{tab:pipelines} compares it with the route of the tool.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        >=Stealth, font=\small,
+        box/.style={draw, rounded corners=2pt, align=center, minimum height=9mm, text width=#1, inner sep=4pt,
+                    execute at begin node=\setlength{\baselineskip}{1.15em}},
+        box/.default=7.8cm]
+        \node[box, fill=blue!8] (arm) at (-1.4,0) {Arm alone: IK with the base where it is\\(seeds: current state, \texttt{rest\_pose})};
+        \node[box=2.9cm, fill=green!10] (fix) at (5.4,0) {Plan \texttt{*\_arm\_lift}\\(\emph{base fixed})};
+        \node[box, fill=blue!8] (samp) at (-1.4,-1.6) {Sample base poses behind the hand\\(two tiers of 40, sorted by base cost)};
+        \node[box, fill=blue!8] (ik) at (-1.4,-3.2) {TRAC-IK at each pose (seed \texttt{rest\_pose}),\\joint-limit and whole-robot collision check};
+        \node[box, fill=blue!8] (rank) at (-1.4,-4.8) {Rank by weighted cost, Eq.~(\ref{eq:wb_cost}):\\hold up to 8, plan the cheapest first};
+        \node[box, fill=green!10] (plan) at (-1.4,-6.4) {RRT-Connect, base box 0.3\,m, then 5\,m;\\heading-seam adapter};
+        \node[box=8.4cm, fill=green!10] (mg) at (0,-8.0) {\texttt{move\_group} executes one trajectory for base, lift and arm};
+        \node[box=2.8cm, fill=green!10] (ctl) at (-3.8,-9.8) {Lift and arm\\controllers};
+        \node[box=3.4cm, fill=green!10] (fol) at (0.5,-9.8) {Base follower\\(feed-forward + P)};
+        \node[box=2.6cm, fill=orange!12] (cm) at (4.8,-9.8) {Nav2 collision\\monitor};
+        \node[box=11.4cm, fill=gray!10] (sim) at (0,-11.6) {Walkie in MuJoCo (\texttt{mujoco\_ros2\_control})};
+        \draw[<-] (arm.north) -- ++(0,0.55) node[above, font=\scriptsize]{pose goal to \texttt{whole\_body\_left} or \texttt{whole\_body\_right}};
+        \draw[->] (arm) -- node[above, font=\scriptsize]{usable} (fix);
+        \draw[->] (arm) -- node[right, font=\scriptsize]{none usable} (samp);
+        \draw[->] (samp) -- (ik);
+        \draw[->] (ik) -- (rank);
+        \draw[->] (rank) -- (plan);
+        \draw[->, dashed] (plan.west) -- ++(-0.4,0) |- node[pos=0.25, left, font=\scriptsize, align=right]{fails:\\next, at\\most 5} (rank.west);
+        \draw[->] (plan) -- (plan |- mg.north);
+        \draw[->] (fix.south) |- (mg.east);
+        \draw[->] (mg.south -| ctl) -- (ctl);
+        \draw[->] (mg.south -| fol) -- (fol);
+        \draw[->, dashed] ([xshift=1.2cm]fol.north) -- node[right, font=\scriptsize]{stop} ([xshift=1.2cm]fol.north |- mg.south);
+        \draw[->] ([yshift=1.5mm]fol.east) -- ([yshift=1.5mm]cm.west);
+        \draw[->, dashed] ([yshift=-1.5mm]cm.west) -- ([yshift=-1.5mm]fol.east);
+        \draw[->] (ctl) -- (ctl |- sim.north);
+        \draw[->] (cm) -- (cm |- sim.north);
+        \draw[->, dashed] (sim.north -| fol) -- node[left, font=\scriptsize]{base pose} (fol);
+    \end{tikzpicture}
+    \caption{\small{Whole-body pose goals in the MoveIt commander. The arm is tried alone first. Otherwise
+    base poses are sampled, solved with IK and ranked by a weighted motion cost, and the cheapest is
+    planned as one MoveIt trajectory. The base part runs through the base follower and the Nav2 collision
+    monitor. Solid arrows carry goals and commands; dashed arrows carry stops, monitor state and the
+    measured base pose.}}
+    \label{fig:commander_pipeline}
+\end{figure}
+
+\paragraph{Planning groups.}
+Two groups, \texttt{whole\_body\_left} and \texttt{whole\_body\_right}, each combine the planar virtual
+joint ($x$, $y$, $\psi$ from \texttt{map} to \texttt{base\_footprint}) with the lift and one arm, eleven
+joints in all. The other arm is not part of the group and does not move, so callers first send it to a
+tucked state (\texttt{standby}) when it could be in the way. A caller selects this route per request by
+naming one of these groups in an ordinary pose goal; every other group keeps the base still. The groups
+are accepted only when the stack is started with \texttt{base\_mode:=whole\_body}. The default,
+\texttt{fixed}, refuses them.
+
+\paragraph{Arm first.}
+Before it moves the base, the commander tries to reach the target with the lift and arm alone. It calls
+TRAC-IK~\cite{tracik} through \texttt{move\_group}'s \texttt{/compute\_ik} service with collision
+avoidance, up to four times, seeded alternately from the current state and from the rest posture
+\texttt{rest\_pose}, a reach over a table. A solution must also pass a collision check of the whole
+robot, including the idle arm, and must remain valid with the lift 1\,cm lower, because the simulated
+lift settles slightly below its command. If a solution passes, the matching arm-and-lift group plans and
+executes it, and the commander reports the goal as \emph{base fixed}.
+
+\paragraph{Base pose sampling.}
+Otherwise the commander samples 80 base poses, in two tiers of 40, that place the arm's shoulder behind
+the hand. The first tier keeps the shoulder 0.3--0.6\,m behind the hand and the body turned at most
+1\,rad away from the hand's direction, where IK usually succeeds for a forward-pointing hand. The second
+tier is wider (0.2--0.7\,m and up to 1.5\,rad) for other hand orientations, and it is used only when the
+first tier yields no candidate that plans. At each pose, TRAC-IK solves the lift and arm with the base
+held at that pose, seeded from \texttt{rest\_pose}. A solution is kept only if every joint is at least
+0.01 inside its limits and it passes the same whole-robot collision check.
+
+\paragraph{Weighted ranking.}
+The usable poses are ranked by a weighted motion cost,
+\begin{equation}
+    c = w_{xy}\,d_{xy} + w_{\psi}\,|\Delta\psi| + w_{l}\,|\Delta z_l|
+        + \sum_{i=1}^{7} w_i\,|\Delta q_i| + w_{r}\sum_{i=1}^{7}\left|q_i-q_i^{\mathrm{rest}}\right|,
+    \label{eq:wb_cost}
+\end{equation}
+where $d_{xy}$ is the straight-line base travel, $\Delta\psi$ the base turn, $\Delta z_l$ the lift
+travel, $\Delta q_i$ the motion of arm joint $i$ from the current state and $\mathbf{q}^{\mathrm{rest}}$
+the rest posture. The defaults are $w_{xy}=1$, $w_r=0.3$ and zero for the other weights. The robot
+therefore stands close to the target, and the arm ends near \texttt{rest\_pose} where a little more base
+travel allows it. The samples of a tier are sorted by base cost and the other terms are non-negative, so
+the commander solves IK in that order and stops once no later sample can be cheaper than the best
+candidate it holds, or once it holds eight usable candidates. It then plans to them cheapest first. The
+goal fails after five failed plans.
+
+\paragraph{Planning.}
+Each candidate is planned with OMPL's RRT-Connect~\cite{kuffner2000} for the whole group. The base is
+first sampled only inside a box extending 0.3\,m beyond the start and goal positions, for at most 2\,s;
+only if that fails is the box widened to 5\,m. With the 5\,m box alone, RRT-Connect's uniform base
+samples gave 2.18\,m of travel for a 1.02\,m displacement. OMPL returns the base heading wrapped to
+$[-\pi,\pi]$, and time parameterisation treats it as a plain number, so a path across $\pm\pi$ would
+turn the base the long way round. A planning-response adapter (\texttt{UnwrapPlanarHeading}) rewrites
+the headings so that every step takes the short way, and the commander still rejects a plan that turns
+more than $\pi$ beyond the heading change. The whole robot is checked against an octomap kept in the
+\texttt{map} frame, so obstacles stay in place while the base moves. A floor gate keeps floor returns
+from marking voxels, and a jump guard clears the octomap when the \texttt{map}$\to$\texttt{odom}
+transform jumps by more than 0.1\,m or 0.1\,rad.
+
+\paragraph{Execution.}
+MoveIt can plan the virtual joint but has no controller for it. A dedicated action server,
+\texttt{whole\_body\_base\_follower}, takes the base part of the trajectory and tracks it at 50\,Hz with
+the planned velocity plus a proportional correction (gain 1.5\,s$^{-1}$) on the
+\texttt{map}$\to$\texttt{base\_footprint} transform, limited to 0.25\,m/s and 0.6\,rad/s. It publishes
+its commands to the input of the Nav2 collision monitor~\cite{nav2}, so whole-body base motion passes
+the same stop and slow-down zones as navigation. \texttt{move\_group} sends the lift and arm parts of
+the same trajectory to their controllers. Before execution, the commander checks again that Nav2 is idle
+and that the base has not moved by more than 0.05\,m or 0.05\,rad since planning began. The follower
+ends the motion on a collision-monitor stop, when the base falls more than 0.25\,m or 0.35\,rad behind
+the plan, when the base does not move under its commands, or when the commander's heartbeat stops. In
+each of these cases it publishes a stop event, so that \texttt{move\_group} also halts the lift and arm.
+Unlike the executor of the \texttt{full\_body\_ik} route, it does not slow the arms when the base lags. The lift
+moves at 0.03\,m/s, so it often sets the duration of the whole motion. The route is covered by launch
+tests against stub controllers; their last full run gave 100 results, none failed and two skipped.
+
+\paragraph{Use in the pick skill.}
+The agent's \texttt{pick\_object} tool first drives the base to a stand-off pose with Nav2. It then sends
+the pre-grasp pose to \texttt{whole\_body\_right}, and moves the hand straight in and up with the right
+arm-and-lift group, because the whole-body groups do not take Cartesian paths. In all four successful
+agent-driven picks in simulation, which were development runs, the commander reported the pre-grasp as
+\emph{base fixed}: the arm reached from the stand-off pose, and the base did not move during the arm
+motion. Coordinated base--arm motion through this route is therefore shown so far by the commander's own
+MuJoCo runs (Section~\ref{sec:commander_results}) and by the scripted picks from a 0.90\,m stand-off
+(Section~\ref{sec:pick}), not by an agent-driven pick. No whole-body goal of either
+route has run on the real robot.
+
+% tab:pipelines sources: main.tex:818-819, 895-951, 1005-1037 (full_body_ik); this subsection
+% and 07-whole-body-moveit.md:489, 506, 519, 527-538, 621, 631-632 (commander demo runs, largest tip
+% error per run: 14.1-14.8, 21.7, 13.8, 14.1, 13.3, 14.6, 15.0, 16.3 mm; the last two are MuJoCo
+% rehearsals of the real-robot chain, not hardware runs). The demo's tip is TF
+% map->openarm_left_hand (whole_body_demo.py:153-158) with map->odom fed from MuJoCo ground truth
+% (bringup/scripts/ground_truth_map_odom.py).
+\begin{table}[H]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.2}
+    % Ragged-right cells without the array package: \raggedright redefines \\, so it is restored
+    % to the row terminator. \newcommand is local to the table environment.
+    \newcommand*{\wbcell}{\raggedright\let\\\tabularnewline}
+    \begin{tabular}{p{0.17\linewidth} p{0.36\linewidth} p{0.36\linewidth}}
+        \toprule
+        & \wbcell\texttt{full\_body\_ik} tool (Sections~\ref{sec:walkie}--\ref{sec:exec_eval}) & \wbcell MoveIt commander (Section~\ref{sec:commander}) \\
+        \midrule
+        \wbcell Caller & \wbcell Interactive tool: targets set by sliders or dragging, preview, \textbf{Execute} & \wbcell ROS action goal: \texttt{pick\_object}, scripted pick, RViz hand target \\
+        \wbcell Planning group & \wbcell\texttt{whole\_body}: base, lift, both arms (18 joints) & \wbcell\texttt{whole\_body\_left} or \texttt{\_right}: base, lift, one arm (11 joints); other arm still \\
+        \wbcell Goal configuration & \wbcell One stacked DLS solution with a null-space pull to the current base pose; no collision model & \wbcell Arm alone first; otherwise up to 80 sampled base poses, collision-checked TRAC-IK at each, ranked by Eq.~(\ref{eq:wb_cost}) \\
+        \wbcell Base distance & \wbcell Rule of Eq.~(\ref{eq:exec_rule}); Nav2 approach beyond 0.75\,m & \wbcell No rule; base pose sampled near the target, longer drives left to the caller \\
+        \wbcell Planner & \wbcell RRT-Connect, base box 0.5\,m & \wbcell RRT-Connect, up to five candidates, base box 0.3\,m, then 5\,m \\
+        \wbcell Obstacles for the base & \wbcell Nav2 map cells as boxes; octomap for the upper body & \wbcell Octomap in \texttt{map} for the whole robot \\
+        \wbcell Execution & \wbcell 50\,Hz executor; arms wait when the base lags & \wbcell\texttt{move\_group} and a base follower behind the Nav2 collision monitor; motion stopped when the base lags \\
+        \wbcell Hand error in MuJoCo & \wbcell 10.8--13.8\,mm over 15 trials, empty world & \wbcell 13.3--21.7\,mm, largest per demo run, obstacle scene \\
+        \wbcell Real robot & \wbcell Not yet run & \wbcell Not yet run \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small{The two whole-body routes in \texttt{walkie-ros}. The hand errors are not directly
+    comparable. Section~\ref{sec:exec_eval} computes them from \texttt{/joint\_states} with the MJCF forward
+    kinematics and a base pose from odometry, whereas the commander's demonstration reads the hand pose
+    from TF with \texttt{map}$\to$\texttt{odom} fed from MuJoCo's ground-truth base pose. The targets and
+    scenes also differ.}}
+    \label{tab:pipelines}
+\end{table}
+
 \subsection{Known Limitations}
 
 \begin{itemize}
@@ -994,6 +1347,24 @@ a combined 15-joint trajectory that the per-arm controllers reject, and a crash 
     \item After a whole-body goal, AMCL's next update can shift the base by a few centimetres (up to
           about 10\,cm observed) in the map frame, moving the hands by the same amount. Executing again
           corrects it.
+\end{itemize}
+
+% Sources: 07-whole-body-moveit.md:47-48, 654-657; manipulation.md:607-609, 1121-1128;
+% /var/tmp/wa-demo/config/pick.toml:10-16.
+The commander route of Section~\ref{sec:commander} checks its IK solutions for collisions, so the first
+item above does not apply to it. It has the following limitations of its own:
+\begin{itemize}
+    \item A collision-monitor stop missed its 0.5\,s target in four of seven runs over three independent
+          checks in MuJoCo. The base met the target every time, but the lift came to rest after up to
+          0.54\,s and the arm after up to 0.59\,s of simulation time.
+    \item The sampled base poses let the body turn up to 1\,rad away from the hand's direction (1.5\,rad
+          in the second tier), so the base can arrive turned away from the target. In one run of the
+          scripted bottle pick, the pre-grasp turned the base by 0.37\,rad and took the bottle out of the
+          head camera's view. A weight on the base turn ($w_{\psi}$ in Eq.~\eqref{eq:wb_cost}) reduces
+          the turn.
+    \item The values in the agent's pick configuration (\texttt{config/pick.toml}: stand-off pose, grasp
+          depth, lift height and the clearing move) were tuned on the simulated water bottle and have not
+          been tried on the robot.
 \end{itemize}
 
 % ============================================================
@@ -1061,6 +1432,369 @@ whole-body radius.
 
 \pending{Repeat the benchmark in the Chulapat~14 world (AMCL, furniture) and with goals beyond the
 0.75\,m whole-body radius, where the Nav2 approach is used.}
+
+
+\subsection{Commander Whole-Body Goals in Simulation}
+\label{sec:commander_results}
+
+% Sources: 07-whole-body-moveit.md:482-538, 553-565, 600-633, 640-660;
+% manipulation.md:360-402; demo_*.json in ~/.cache/walkie-plan-fullbody.
+The whole-body route of the MoveIt commander (Section~\ref{sec:commander}) was evaluated with a
+demonstration client (\texttt{whole\_body\_demo.py} in \texttt{walkie-ros}) in a MuJoCo scene with a
+table in front of the robot. The client sends a fixed sequence of goals and checks each result
+against an expectation. A target on the table that the arm cannot reach from the start pose is first
+sent to \texttt{left\_arm\_lift}, which must fail without a base command (\texttt{far\_arm}). The same
+target is then sent to \texttt{whole\_body\_left}, which must reach it by moving the base, the lift and
+the arm together (\texttt{far\_body}). Other steps send a target that the arm reaches alone and that
+must be reported as \emph{base fixed} (\texttt{near\_body}), round trips between a target near the start
+and the far target (\texttt{home\_}$n$, \texttt{far\_}$n$), and two hand directions that turn the base
+to a heading near $\pi$ (\texttt{seam\_turn}) and through $\pm\pi$ (\texttt{seam\_cross}). A whole-body
+step fails when the hand ends more than 30\,mm from its target, when the base turns more than $\pi$
+beyond the heading change, or when the base path is longer than 1.5 times the displacement plus
+0.3\,m. The hand position is read from TF, and the \texttt{map}$\to$\texttt{odom} transform is fed from
+MuJoCo's ground-truth base pose, so the errors contain no localisation error. This measurement, the
+targets and the scene differ from those of Section~\ref{sec:exec_eval}, so the two sets of hand errors
+are not directly comparable (Table~\ref{tab:pipelines}).
+
+\begin{table}[H]
+    \centering
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{llcccc}
+        \toprule
+        Step & Status & \shortstack{Base\\travel} & \shortstack{Base\\displacement} & \shortstack{Turn\\(rad)}
+        & \shortstack{Hand\\error (mm)} \\
+        \midrule
+        \texttt{far\_arm}    & Planning failed (expected)    & 0          & 0          & 0     & --   \\
+        \texttt{near\_arm}   & Success                       & 1.8\,mm    & 0.3\,mm    & 0.004 & --   \\
+        \texttt{near\_body}  & Success (base fixed)          & 3.6\,mm    & 0.6\,mm    & 0.015 & --   \\
+        \texttt{far\_body}   & Success                       & 1.022\,m   & 1.020\,m   & 0.77  & 10.5 \\
+        \texttt{home\_0}     & Success                       & 1.016\,m   & 1.014\,m   & 0.17  & 8.9  \\
+        \texttt{far\_0}      & Success                       & 1.138\,m   & 1.136\,m   & 0.34  & 11.3 \\
+        \texttt{home\_1}     & Success                       & 1.093\,m   & 1.092\,m   & 0.04  & 9.4  \\
+        \texttt{far\_1}      & Success                       & 0.987\,m   & 0.986\,m   & 0.50  & 11.3 \\
+        \texttt{seam\_turn}  & Success                       & 0.147\,m   & 0.147\,m   & 2.92  & 8.7  \\
+        \texttt{seam\_cross} & Success, one $\pm\pi$ crossing & 0.860\,m  & 0.858\,m   & 1.74  & 13.3 \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small{One run of the demonstration client with two round trips (\texttt{-{}-cycles 2}) in
+    MuJoCo. \texttt{far\_arm} and \texttt{near\_arm} use \texttt{left\_arm\_lift}; all other steps use
+    \texttt{whole\_body\_left}. Base travel is the length of the base path and displacement the
+    straight-line distance between its ends. The client does not score the hand error of the first
+    three steps. \texttt{near\_arm} and \texttt{near\_body} sent no base command; their small base motion
+    is drift.}}
+    \label{tab:commander_demo}
+\end{table}
+
+Table~\ref{tab:commander_demo} lists one run in detail. It was the first clean run of the first
+version: the three runs before it each exposed a fault, which was fixed, so it is not a success rate.
+Table~\ref{tab:commander_runs} lists every documented run of the client. Twelve of the thirteen runs
+passed every step. The failed run passed every whole-body step and failed only the final step, which
+sent the idle arm home with the lift at 0.492\,m; that step was changed afterwards. The runs were made
+on successive versions of the commander, so they do not form a success rate of one version either.
+
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{lccc}
+        \toprule
+        Runs & Count & \shortstack{Passed\\every step} & \shortstack{Largest hand\\error (mm)} \\
+        \midrule
+        Development run (Table~\ref{tab:commander_demo}) & 1 & 1 & 13.3 \\
+        First independent check                          & 3 & 3 & 14.1--14.8 \\
+        Second independent check                         & 2 & 2 & 21.7, 13.8 \\
+        Third independent check                          & 1 & 1 & 14.1 \\
+        Planning near the table                          & 3 & 2 & --$^{a}$ \\
+        Rest posture as the default                      & 1 & 1 & 14.6 \\
+        Real-robot launch file, MuJoCo$^{b}$             & 1 & 1 & 15.0 \\
+        Robot computer, MuJoCo, headless$^{b}$           & 1 & 1 & 16.3 \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small{Documented runs of the demonstration client, in the order they were made (the near-table
+    runs on 2026-11-11, the rest-posture run on 2026-11-17, the last two on 2026-11-19). All runs are in
+    MuJoCo with the same obstacle scene and ground-truth \texttt{map}$\to$\texttt{odom}. The development
+    run and the second and third checks ran two round trips (\texttt{-{}-cycles 2}), and the near-table
+    runs ran one. $^{a}$Only the step nearest the table is reported, with 9.0--11.3\,mm. $^{b}$These rows
+    rehearse the software chain of the real robot; they are not hardware runs, and no whole-body goal of
+    the commander has run on the real robot (Section~\ref{sec:real}). The run on the robot computer, after
+    a fresh build, took 2\,min 1\,s for its nine steps.}}
+    \label{tab:commander_runs}
+\end{table}
+
+Four runs have a per-step report. In these, the hand ended 8.7--13.3\,mm, 9.1--14.6\,mm, 11.3--15.0\,mm
+and 11.4--16.3\,mm from its targets, in the order of the table. Over the runs that report it, the
+largest error of a run lay between 13.3 and 21.7\,mm, inside the client's 30\,mm tolerance. Most of
+the error is height.
+In the run of Table~\ref{tab:commander_demo} the hand stopped 7--11\,mm below the target, of which
+about 3\,mm is the lift settling below its command. The remainder was not separated and is probably
+gravity sag of the arm. The far goals moved the base 0.99--1.14\,m, and in every step of the four
+per-step reports the base path was at most 3.3\,\% longer than the straight-line displacement. The
+collision monitor slowed the base in several runs, for example four times in the rehearsal of the
+real-robot chain, but it stopped the base in none of the demonstration runs.
+
+% Sources: manipulation.md:882-924 (results of 2026-11-17 and setup of 2026-11-16).
+\paragraph{Rest weight (planning only).}
+The weights of Eq.~\eqref{eq:wb_cost} were compared in a planning benchmark that runs the commander's
+sampling, IK and planning in its own process, with no simulator and no execution. The benchmark used 72
+goals: 18 whole-body targets from 1\,m before the table, in a scene of boxes and in an octomap with
+0.03\,m voxels, each with the idle arm in \texttt{home} and in \texttt{standby}. The arm started in
+\texttt{home}, and every preset reached all 72 goals. Table~\ref{tab:rest_weight} compares the current
+default, a rest weight $w_r=0.3$ with \texttt{rest\_pose} as the rest posture, with a zero rest weight
+and with the defaults before this change. Against $w_r=0$ with the same rest posture, $w_r=0.3$
+reduced the mean arm motion by 17\,\% (from 5.01 to 4.16\,rad), for 6\,cm more base travel and 0.9\,s
+more median planning time per goal. Against the earlier defaults, the reduction was 11\,\%, for 9\,cm
+more base travel and 1.1\,s more per goal. The base turn and the lift travel barely changed. The goals
+still ended about 3.5\,rad from \texttt{rest\_pose}, summed over the seven joints, because a hand at a
+table target needs a different posture. These results describe the selected goal configurations only.
+Their effect on executed motions has not been measured.
+
+\begin{table}[H]
+    \centering
+    \small
+    \setlength{\tabcolsep}{3pt}
+    \begin{tabular}{lccccccc}
+        \toprule
+        Weight and rest posture & \shortstack{Time\\(s)} & \shortstack{IK\\calls} & \shortstack{Base\\(m)}
+        & \shortstack{Turn\\(rad)} & \shortstack{Lift\\(m)} & \shortstack{Arm\\(rad)}
+        & \shortstack{From\\rest (rad)} \\
+        \midrule
+        $w_r=0$, \texttt{home} (earlier defaults)       & 0.88 & 8  & 0.54 & 0.62 & 0.21 & 4.66 & 4.66 \\
+        $w_r=0$, \texttt{rest\_pose}                    & 1.11 & 13 & 0.57 & 0.59 & 0.23 & 5.01 & 5.04 \\
+        $w_r=0.3$, \texttt{rest\_pose} (defaults)       & 1.99 & 30 & 0.63 & 0.59 & 0.19 & 4.16 & 3.52 \\
+        $w_r=0.3$, \texttt{rest\_pose}, four candidates & 1.59 & 22 & 0.61 & 0.58 & 0.20 & 4.48 & 3.98 \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small{Planning-only comparison of rest weights over 72 whole-body goals (no simulator, no
+    execution). The first row gives the defaults before 2026-11-17, the third the current defaults. Time and IK calls are medians per goal, for IK and planning in the benchmark's process,
+    without the commander's service calls. Base travel, base turn, lift travel, arm motion and the final
+    distance from the rest posture are means over the goals; arm motion and the distance from the rest
+    posture are summed over the seven arm joints. The rest posture also seeds the IK. The last row holds
+    at most four usable candidates instead of eight.}}
+    \label{tab:rest_weight}
+\end{table}
+
+% Sources: manipulation.md:1587-1607, 1688-1706; 07-whole-body-moveit.md:247-252.
+\paragraph{IK first for single-arm goals (planning only).}
+Pose goals to the single-arm groups (\texttt{left\_arm}, \texttt{right\_arm}, \texttt{left\_arm\_lift} and
+\texttt{right\_arm\_lift}) are now solved by IK first. The commander requests up to four collision-aware
+IK solutions, checks the whole robot at each, and plans to the first that passes, for at most 1.0\,s.
+If none passes, it plans the pose goal itself for 5\,s, as before. The whole-body groups do not use
+this path. Table~\ref{tab:ik_first} compares the two in the same planning benchmark, for
+\texttt{left\_arm\_lift} goals only: eight goals of four tries in each scene. IK first reduced the
+median time from about 5.2\,s to about 1.2\,s and reached at least as many goals. On the 0.02\,m
+octomap, about half of the tries found no IK solution with clearance and fell back, and the median
+stayed at 5.3\,s.
+
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{lcc}
+        \toprule
+        Scene & Pose goal, 5\,s & IK first, 1.0\,s \\
+        \midrule
+        Empty               & 31 of 32, 5.26\,s & 32 of 32 (25 by IK), 1.28\,s \\
+        Boxes               & 32 of 32, 5.22\,s & 32 of 32 (23 by IK), 1.19\,s \\
+        Octomap, 0.03\,m    & 31 of 32, 5.17\,s & 32 of 32 (27 by IK), 1.18\,s \\
+        Octomap, 0.02\,m    & 30 of 32, 5.16\,s & 32 of 32 (15 by IK), 5.30\,s \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small{Planning-only comparison for \texttt{left\_arm\_lift} pose goals: goals reached and
+    median time per try, IK, checks and fallback included. ``By IK'' counts the tries planned to an IK
+    solution; the others fell back to the 5\,s pose goal.}}
+    \label{tab:ik_first}
+\end{table}
+
+% Sources: 07-whole-body-moveit.md:640-660 (Still open, Known limits); manipulation.md:951-967.
+\paragraph{Limits of this evidence.}
+All runs used one obstacle scene, ground-truth localisation and the simulator; AMCL and the real robot
+were not involved. The comparison that motivated the route, a whole-body goal against a Nav2 drive
+followed by an arm goal over 30 runs, has not been run, so the route has not yet been shown to perform
+better than the sequential approach. Each sampled base pose contributes one IK solution, the one
+TRAC-IK~\cite{tracik} finds nearest its seed, and at most five candidates are planned, so the weights
+can only reorder a small set of configurations.
+% end of sec:commander_results
+
+
+\subsection{Pick Skill in the Chulapat~14 Kitchen}
+\label{sec:pick}
+
+% Sources: wa-demo docs/setup/08-chula-simulation.md:54-58, 294-298, 340-352, 510-526;
+% wa-demo config.toml:27-30; config/pick.toml.
+The commander route is used by a pick skill that was tested in the Chulapat~14 world
+(Fig.~\ref{fig:world}) on a water bottle near the south-west corner of the kitchen table. In these
+tests the simulation ran Nav2, \texttt{move\_group} with the whole-body groups, the commander and the
+base follower. The \texttt{map}$\to$\texttt{odom} transform was fed from MuJoCo's ground truth, and
+AMCL was not run. People came from the simulator's oracle, that is, from ground truth. Objects came
+from perception: the \texttt{walkie-vision} node ran YOLOE~\cite{wang2025yoloe} on the rendered images
+of the head camera (Fig.~\ref{fig:yoloe}), and its tracks filled the object memory of
+\texttt{walkie-database}, which saves a sighting about every 2\,s while an object stays in view.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\linewidth]{yoloe_detections.jpg}
+    \caption{\small{YOLOE detections with class, score and track ID on a rendered head-camera image of
+    the kitchen table in simulation. The water bottle, the cup and the apple are detected. Some labels are
+    wrong: a red can is labelled \emph{bottle} (0.57) and a partition is labelled \emph{chair} (0.41).
+    These tracks fill the object memory that \texttt{recall\_object} and \texttt{pick\_object} read.}}
+    \label{fig:yoloe}
+\end{figure}
+
+% Sources: grasp.py:1-80, 146-170, 310-360, 501-575; arm/pick.py; config/pick.toml.
+\paragraph{The \texttt{pick\_object} tool.}
+The agent's tool takes only the object's name. It returns a sentence on success. On failure it
+returns an error code with a sentence, for example \texttt{SKILL\_FAILED}, \texttt{TIMEOUT} or
+\texttt{PRECONDITION\_FAILED}. No position or joint value reaches the language model. The tool runs
+these stages:
+\begin{enumerate}[itemsep=1pt]
+    \item \emph{Lookup.} It asks the object memory for the name and takes the first match with a position.
+    \item \emph{Drive.} It drives with Nav2 to a stand-off pose facing the object, 0.65\,m back from the
+          object's centre and 0.20\,m to the left of the approach line, so that the object lies ahead of
+          the right hand. If the object is far, it first drives to the nearest named place. It tries up to
+          eight approach headings, offset by $0^\circ$, $\pm30^\circ$, $\pm60^\circ$, $\pm120^\circ$ and
+          $180^\circ$. A drive that Nav2 aborts is accepted when the base stopped within 0.10\,m and
+          $10^\circ$ of the stand-off pose.
+    \item \emph{Check after the drive.} The memory must hold a sighting of the object at most 5\,s old
+          (the tool waits up to 6\,s for one), the object must have moved less than 0.15\,m, and the object
+          and every planned hand pose must lie in a reach envelope: object centre 0.55--1.15\,m high, each
+          pose 0.35--0.90\,m from the base and 0.50--1.30\,m high.
+    \item \emph{Prepare.} The left arm moves to \texttt{standby}, so that its fingers do not touch the base
+          when the lift lowers, and the right gripper opens.
+    \item \emph{Reach.} After the same checks again, the hand moves to a pre-grasp pose 0.10\,m before the
+          grasp pose through \texttt{whole\_body\_right}.
+    \item \emph{Approach.} After a further check of the sighting's age and the object's shift, the hand
+          moves straight in with a Cartesian path of \texttt{right\_arm\_lift}, to a grasp pose that places
+          the tool centre point 0.02\,m past the object's centre. The fingers may then touch the octomap.
+    \item \emph{Close.} The gripper closes. The grasp is accepted when the commander reports the object
+          held, with the finger gap inside its grasp band of 0.005--0.044\,m.
+    \item \emph{Lift.} The hand rises 0.10\,m in a straight line.
+    \item \emph{Clear.} The hand moves in a straight line to 0.30\,m ahead of the base and 0.35\,m to its
+          right, because a direct move home from above the table dragged the bottle out of the fingers.
+    \item \emph{Home.} The right arm goes home through \texttt{right\_arm\_lift}, which raises the lift
+          back to 0.7435\,m, and then the left arm goes home.
+\end{enumerate}
+The numbers are kept in a configuration file (\texttt{config/pick.toml}). They were tuned on the
+simulated bottle and have not been tried on the robot.
+
+% Sources: manipulation.md:435-440, 600-655; sim_bottle_pick.py; run{1..28}.json; fix-run{1..6}.json.
+\paragraph{Scripted pick.}
+The sequence was first developed as a script (\texttt{sim\_bottle\_pick.py} in \texttt{walkie-ros}).
+The script does not use perception: it reads the bottle's pose as the world file places it, which is
+ground truth. It opens the right gripper, drives with Nav2 to a stand-off pose facing north and tucks
+the left arm. It then sends the pre-grasp pose to \texttt{whole\_body\_right}. The approach of 0.10\,m
+and the lift of 0.10\,m are Cartesian paths of \texttt{right\_arm\_lift}, and the hand then holds the
+bottle for 5\,s. The script has no clearing move and does not send the arms home. A pick passes when the hand is at its target, the finger gap lies
+inside the grasp band and the head camera's depth image shows the bottle gone from its place. A pick
+whose camera check cannot decide is \emph{inconclusive}. The gripper controller stalls on the bottle
+and reports the close as failed, so the hold is judged from the grasp flag and the finger gap, which
+settled at 0.013--0.014\,m. Table~\ref{tab:pick_scripted} lists the documented runs.
+
+\begin{table}[H]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabular}{lllp{0.40\linewidth}}
+        \toprule
+        Version & Stand-off & Passed & Failures \\
+        \midrule
+        Development       & 0.90\,m S          & 5 of 11  & Approach found no Cartesian path (4, all before
+        the left-arm tuck); camera did not confirm the lift (1); collision monitor stopped the turning base
+        during the pre-grasp (1) \\
+        Earlier version   & 0.65\,m S, 0.20\,m W & 13 of 17 & Nav2 drive failed (2); bottle held, but a
+        0.37\,rad base turn took it out of the camera's view (1); pre-grasp caught on the table's near
+        edge (1) \\
+        With added checks & 0.65\,m S, 0.20\,m W & 3 of 6   & Nav2 drive failed (1); bottle held, camera
+        check inconclusive (1); pre-grasp ended 0.14\,m from its target (1) \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small{Scripted bottle picks in the Chulapat~14 simulation. The script reads the bottle's
+    ground-truth pose. The stand-off is the drive's goal relative to the bottle (S: south, W: west). The
+    left-arm tuck was added from the seventh development run. The script changed between runs of the
+    first row and between rows, so the 18 passes in the first 28 runs are not the success rate of one
+    configuration.}}
+    \label{tab:pick_scripted}
+\end{table}
+
+The stand-off pose decides whether the base moves during the arm motion. From 0.90\,m straight south,
+every pre-grasp moved the base. In the five passes of the development runs, the commander planned
+0.14--0.31\,m of base travel, the base ended 0.04--0.18\,m from where it had stopped and turned by
+0.27--0.52\,rad, and the hand ended 10.6--15.1\,mm from the pre-grasp pose. These five passes are
+the clearest case in this report of a pick in which the base and the arm moved together. One such
+reach was stopped by the collision monitor. From the stand-off pose 0.65\,m south and 0.20\,m west, the arm
+usually reached alone. Nine of the 13 passes of the earlier version and all three passes of the
+version with checks were reported \emph{base fixed}. In the other four passes the base ended
+0.01--0.06\,m from where it had stopped and turned by 0.07--0.14\,rad. The status \emph{base fixed}
+means that the commander sent no base command. In two failed runs the base moved or turned although
+the status read \emph{base fixed}, once because the fingers caught on the table. A pass took 104--170\,s of wall time in
+the development runs and 120--160\,s in the version with checks. In the earlier version, which ran on
+a loaded machine, it took 166--219\,s, with one outlier of 481\,s.
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{pick_before.png}
+        \caption{From the stand-off pose, before the reach}
+    \end{subfigure}\hfill
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{pick_after.png}
+        \caption{After the 0.10\,m lift and the 5\,s hold}
+    \end{subfigure}
+    \caption{\small{Head-camera views of a scripted bottle pick in the Chulapat~14 kitchen, from a later run
+    of the script that is not counted in Table~\ref{tab:pick_scripted}. The pre-grasp was reported
+    \emph{base fixed}. The hand ended 10.7\,mm from the pre-grasp pose and 12.6\,mm from the grasp pose,
+    the gripper held the bottle with a 13.3\,mm finger gap, and the hand rose 97\,mm. In (b) the bottle
+    has left its place on the table, and its cap shows in the gripper at the bottom of the image.}}
+    \label{fig:pick_frames}
+\end{figure}
+
+% Sources: agent-tools.jsonl rows 184-221, 228, 247, 279, 297-310; commander_*.log (four
+% "[whole_body_right] Success (base fixed)" lines); prompts.py:64-65; git log of walkie-agent-ros
+% between 04:35 and 15:54 on 2026-11-20 (f2ecce4 07:06, db8b4d5 07:42, 121a009 11:59, 0f144f9 14:01,
+% b82a9f7 15:26).
+\paragraph{Agent-driven picks.}
+An operator typed each request to the agent, and typed the person's answer whenever the agent asked a
+question with \texttt{wait\_for\_person}. The agent's language model was
+\texttt{deepseek/}\allowbreak\texttt{deepseek-v4.1-flash:nitro}, served through OpenRouter. On 2026-11-20 the agent called \texttt{pick\_object} ten times
+in seven sessions, and four calls succeeded (Table~\ref{tab:pick_agent}). These were development runs,
+and the code changed between sessions. Before the second session the approach was moved to the
+arm-and-lift group. After the third, the three far-side headings were added. The object checks of the
+stages above were added and revised from the fifth session on, so only the last session ran the
+version described above. The tally is therefore not the success rate of one version. In all four
+successful calls, the commander reported the whole-body pre-grasp as \emph{base fixed}: the base moved
+only during the Nav2 drive to the stand-off pose, before the arm moved. A successful call took
+164.7--318.2\,s of wall time, drive included. The real-time factor of the simulation was not recorded
+in these sessions, so these durations are not robot times.
+
+\begin{table}[H]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabular}{c c l r p{0.46\linewidth}}
+        \toprule
+        Session & Call & Result & Time (s) & Cause of failure \\
+        \midrule
+        04:37 & 1 & \texttt{SKILL\_FAILED} & 148.7 & Approach: MoveIt found no path for \texttt{right\_arm} \\
+              & 2 & \texttt{SKILL\_FAILED} &  24.9 & Same \\
+        07:07 & 1 & \texttt{TIMEOUT}       & 300.3 & A motion did not finish within the call's limit of about 300\,s \\
+              & 2 & \texttt{SKILL\_FAILED} &  59.2 & Reach: none of 80 sampled base poses gave a usable IK solution \\
+        07:27 & 1 & \texttt{SKILL\_FAILED} & 276.6 & Drive: stand-off pose not reached under the five headings then tried; last Nav2 error 208 (no valid path) \\
+              & 2 & \texttt{SKILL\_FAILED} & 204.3 & Same \\
+        07:49 & 1 & Success & 164.7 & -- \\
+        12:15 & 1 & Success & 260.5 & -- \\
+        14:45 & 1 & Success & 223.9 & -- \\
+        15:30 & 1 & Success & 318.2 & -- \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small{Every \texttt{pick\_object} call of the agent in the Chulapat~14 simulation on
+    2026-11-20, by session start time. Times are wall-clock durations of the call. The code changed
+    between sessions.}}
+    \label{tab:pick_agent}
+\end{table}
+
+After a failed call, the agent retried once and then told the user that the pick had failed. After an
+arm failure it first read the arm state, as its prompt instructs. The last session, in which the agent went on to hand the bottle over in the living room, is traced
+with its limitations in Section~\ref{sec:skills}.
 
 % ============================================================
 \section{Path Planning (In Progress)}
@@ -1218,38 +1952,163 @@ will be implemented, as a replacement for or an extension of the RRT-Connect pla
 for the whole-body plan of Section~\ref{sec:walkie}. The choice will be based on which weakness
 limits Walkie most in the furnished room.
 
+% Sources: manipulation.md:951-967 ("What the weights cannot do"), 1587-1607; whole_body_goal.hpp:152-167;
+% whole_body_option.hpp:1106-1146; 07-whole-body-moveit.md:247-278.
+While these variants were under review, the commander route of Section~\ref{sec:commander} changed how
+goal configurations are chosen, and RRT-Connect itself was left unchanged. A whole-body goal samples up
+to 80 base poses, solves IK at each and plans to up to five of the cheapest usable candidates, so a plan
+that fails from one base pose can still succeed from another. This only partly addresses the goal-set
+limitation stated in the problem definition above. Each base pose contributes a single IK solution, the
+one TRAC-IK finds nearest its seed, so other arm postures at the same base pose are never tried. Unlike
+IK-RRT, no goal configurations are added while the tree grows; a failed plan only moves the search to
+the next candidate. Single-arm pose goals are now also solved by IK first and planned to the first
+solution that passes a whole-robot collision check. In a planning-only benchmark of
+\texttt{left\_arm\_lift} goals, this reduced the median planning time from about 5.2\,s to about 1.2\,s.
+It narrows the goal set rather than widening it, since the planner receives one goal configuration
+instead of the goal region.
+
 \pending{The selected method, its implementation and its results.}
 
 % ============================================================
 \section{Example Scenarios: Agent Reasoning over Traditional Skills}
 \label{sec:skills}
 
-This section illustrates, without results, how the agent is intended to reason about general tasks
-once the manipulation skills are available as tools. The agent only decides \emph{what} to do and in
-which order; every motion is planned and executed by the traditional control stack, which reports
-success or an explicit failure back to the agent. The traces below are illustrative, written in the
-form of the agent's tool calls; this part is still in development.
+This section shows how the agent reasons about a task once a manipulation skill is available to it
+as a tool. The agent only decides \emph{what} to do and in which order; every motion is planned and
+executed by the traditional control stack, which reports success or an explicit failure back to the
+agent. The first two traces below are recorded. They are taken from the agent's tool log in the
+MuJoCo simulation of the Chulapat~14 world (Fig.~\ref{fig:world}), with
+\nolinkurl{deepseek/deepseek-v4.1-flash:nitro}, served through OpenRouter, as the language model.
+Both are development runs, and the pick skill changed between them. The pointing and bag-carrying
+traces that follow are hypothetical. They use tools that the agent does not have (\texttt{detect},
+\texttt{point}, \texttt{carry\_pose}, \texttt{navigate}, \texttt{place}), since no placing, pointing
+or carrying skill exists yet, and they only show the intended decomposition of those tasks.
 
 \newcommand{\trace}[2]{%
   \par\smallskip\noindent\fbox{\begin{minipage}{0.95\linewidth}\small
   \textbf{Request:} ``#1''\par\smallskip\ttfamily\footnotesize #2\end{minipage}}\par\medskip}
 
-\paragraph{Pick and place.}
-The agent breaks the request into finding the object, going to it, grasping it, going to the person
-and handing it over. If a grasp is unreachable, it asks the control stack to move closer or try
-another grasp before giving up.
-\trace{Bring me the cup from the kitchen.}{%
-1.\ find\_object("cup") $\rightarrow$ last seen: kitchen counter\\
-2.\ navigate("kitchen counter") $\rightarrow$ succeeded\\
-3.\ detect("cup") $\rightarrow$ pose found\\
-4.\ pick("cup") $\rightarrow$ failed: unreachable\\
-5.\ \textit{reason: the cup is at the back of the counter; approach from the other side}\\
-6.\ navigate("kitchen counter", side="left") $\rightarrow$ succeeded\\
-7.\ pick("cup") $\rightarrow$ succeeded, grasp detected\\
-8.\ navigate("user") $\rightarrow$ succeeded\\
-9.\ hand\_over() $\rightarrow$ succeeded; say("Here is your cup.")}
+\paragraph{Pick and hand-over (recorded).}
+% Source: agent-tools.jsonl rows 297-310, session walkie-20261120-153047-6165, 2026-11-20
+% 15:37:15-15:45:01 +07. Rows 299 and 303 (update_todos status changes) and 305 (find_people,
+% same result as row 298) are omitted. Durations are the log's "seconds" field (wall clock).
+The trace below is one run on 20~November~2026 (session \texttt{walkie-20261120-153047-6165}). The
+agent planned the task as two steps, fetched the bottle with one call of the pick skill and handed it
+over in the living room.
+\trace{[not logged: a typed request for the water bottle]}{%
+1.\ update\_todos(add "Pick up the water bottle",\\
+\hspace*{2em}"Bring the water bottle back to the person")\\
+2.\ find\_people() $\rightarrow$ person\_1 standing, raising left arm;\\
+\hspace*{2em}person\_2 sitting; both in the living room \textit{[oracle]}\\
+3.\ say("Sure, I will go and pick up the water bottle.\\
+\hspace*{2em}Please stand clear while I move.")\\
+4.\ recall\_object("water bottle") $\rightarrow$ three bottles in the kitchen room:\\
+\hspace*{2em}220 and 219 on kitchen table 3, 222 on bar 1, last seen 38 to 58 s ago\\
+5.\ pick\_object("water bottle") $\rightarrow$ success after 318 s: "Picked up the bottle\\
+\hspace*{2em}with the right hand, lifted it and brought both arms home.\\
+\hspace*{2em}Arms: safe for driving."\\
+6.\ go\_to("living room") $\rightarrow$ "Arrived at living room." (105 s)\\
+7.\ say("I am back with the water bottle. It is in my right hand,\\
+\hspace*{2em}please take it.")\\
+8.\ wait\_for\_person("The water bottle is in my right hand. Please take it,\\
+\hspace*{2em}and tell me when you have it.") \textit{[the operator types the reply]}\\
+9.\ say("You are welcome. I will open my hand now to release it.")\\
+10.\ set\_gripper(arm="right", state="open") $\rightarrow$ "Opened the right gripper.\\
+\hspace*{2em}Arms: safe for driving."\\
+11.\ update\_todos(t2 completed, note "Delivered the bottle and released it\\
+\hspace*{2em}into the person's hand")\\
+\textit{[Abridged: two update\_todos status changes, before steps 3 and 6, and a second\\
+\hspace*{2em}find\_people call after step 6 with the same result are omitted.]}}
 
-\paragraph{Pointing.}
+% Sources: rows 297 and 310 (timestamps); pick.toml:6-10 (pick stages), :34-39 (headings);
+% commander_2645778_1795163436083.log:81 (base fixed); agent.log:192 (memory object 220).
+% The four agent picks (rows 228, 247, 279, 302) map to commander_2332408, _2482995, _2586570 and
+% _2645778; each logs exactly one whole-body success, "(base fixed)". The claim is limited to agent
+% picks on purpose: 9 of the 18 passed scripted runs in /var/tmp/pick-scratch/sim-pick/live
+% (run1, 3, 7, 9, 11, 12, 18, 23, 27) report "Success (base travel 0.096-0.459 m)" at the pre-grasp,
+% and walkie-ros docs/guides/manipulation.md:607-613 documents base travel in scripted pre-grasps.
+The run took about eight minutes from the first tool call to the last, most of it inside two calls:
+\texttt{pick\_object} (318\,s) and the drive back to the living room (105\,s). Both are wall-clock
+times on the simulation computer. The language model chose the steps, kept the person informed and
+decided when to open the hand. The continuous decisions of the pick were taken inside
+\texttt{pick\_object}. It
+drove to a stand-off pose facing the remembered bottle, reached the pre-grasp pose through the
+commander's \texttt{whole\_body\_right} group (Section~\ref{sec:commander}), moved straight in,
+closed the gripper, lifted the bottle and brought both arms home. The commander reported that
+whole-body reach as successful with the base fixed, as it did for all four successful agent picks
+logged so far (Section~\ref{sec:pick}): in these runs the base moved during the drives and
+stood still during the arm motion.
+The side from which the robot approaches is not left to the language model either:
+\texttt{pick\_object} tries up to eight approach headings itself (Section~\ref{sec:pick}).
+
+% Sources: oracle.log:4; oracle_perception.py:3; agent.log:1 (--objects-topic
+% /walkie_vision/sim/objects); wv-prep config/vision.yaml:35; prompts.py:164-165 (wait_for_person
+% ends the turn); row 309 (set_gripper open); row 310 (closing note).
+Three limitations of this run must be noted. First, \texttt{find\_people} does not run a detector
+here. The MuJoCo world has no person bodies, so a simulation oracle projects the two people of a
+fixed scene file into the head camera's view; the people are ground truth. The objects, in contrast,
+are perceived. \texttt{recall\_object} reads the object memory of \texttt{walkie-database}, which is
+filled by YOLOE~\cite{wang2025yoloe} detections from \texttt{walkie-vision} on the simulated head-camera
+images, and \texttt{pick\_object} takes the bottle's position from that memory. Second,
+\texttt{wait\_for\_person} ends the agent's turn, and the person's reply that followed was typed by
+the operator. Third, the hand-over is only the gripper opening on command (step~10). No simulated
+person takes the bottle, so the agent's closing note that it released the bottle into the person's
+hand rests on the operator's reply alone.
+
+\paragraph{Recovery from a failed pick (recorded).}
+% Source: agent-tools.jsonl rows 184-194, session walkie-20261120-043745-2f96, 2026-11-20
+% 04:41:23-04:44:54 +07; every tool call of the task is listed, long results are shortened.
+% commander_2179638_1795124253941.log:65 and :93 show "[whole_body_right] Success (base fixed)"
+% before each failed approach. The pick_object of this run predates commits 809f65b, db8b4d5,
+% eb7f3d6 and 0f144f9 (2026-11-20 07:06-14:01 +07) that changed the pick before session 153047.
+The second trace is an earlier development run (session \texttt{walkie-20261120-043745-2f96}), made
+with an older version of \texttt{pick\_object} than the run above. In both of its attempts the
+commander completed the whole-body reach to the pre-grasp pose with the base fixed, and MoveIt then
+found no path for the arm's approach to the grasp pose. The trace lists every tool call of the task;
+long results are shortened.
+\trace{[not logged: a typed request for the water bottle]}{%
+1.\ recall\_object("water bottle") $\rightarrow$ bottles 128 and 129 on kitchen table 3\\
+\hspace*{2em}and 133 on bar 1, all in the kitchen room, and three cups\\
+2.\ find\_people() $\rightarrow$ person\_1, person\_2 in the living room \textit{[oracle]}\\
+3.\ update\_todos(add "Pick up the water bottle", "Move the arm to a safe\\
+\hspace*{2em}driving pose", "Drive back to the living room")\\
+4.\ say("Sure, I'll fetch the water bottle. I'm moving my arm now.")\\
+5.\ pick\_object("water bottle") $\rightarrow$ SKILL\_FAILED after 149 s: "The approach\\
+\hspace*{2em}to the bottle failed: Could not move the right hand: MoveIt found\\
+\hspace*{2em}no path for right\_arm (Planning Failed). [...]"\\
+6.\ get\_arm\_state() $\rightarrow$ "[...] Right arm: no named pose, not safe for\\
+\hspace*{2em}driving. [...]"\\
+7.\ move\_arm\_to\_pose(pose="home", arm="right") $\rightarrow$ success\\
+8.\ pick\_object("water bottle") $\rightarrow$ SKILL\_FAILED after 25 s, same message\\
+9.\ say("I'm sorry, I could not pick up the water bottle. My arm could not\\
+\hspace*{2em}find a path to it. I will leave my arm in a safe position.")\\
+10.\ update\_todos(t1 failed, note "pick\_object failed twice: MoveIt found no\\
+\hspace*{2em}path for the right arm"; t2 and t3 cancelled)\\
+11.\ move\_arm\_to\_pose(pose="home", arm="right") $\rightarrow$ success}
+
+% Source: wa-demo src/walkie_agent/prompts.py:63-65 (arm rule), :153-160 (failure and todo rules).
+After the first failure the model read the arm state, returned the right arm home and retried once.
+The retry failed in the same way. The model then told the person what had gone wrong, marked the
+step failed with the reason, cancelled the two steps that depended on it and left the arm at home.
+This recovery is not coded in the agent's runtime. The model follows rules in its system prompt,
+which say to call \texttt{get\_arm\_state} and try again at most once after an arm tool fails, to tell
+the person with \texttt{say} when a tool fails, and to mark a step that cannot be done as failed with
+a note.
+
+% Source: agent-tools.jsonl rows 271-279 (session walkie-20261120-144540-ae90) and 280-283
+% (update_todos schema error, skipped find_people, both re-issued); prompts.py:75-83 (go_to_object
+% then find_objects); runtime/middleware.py:160 ("Not run: ... failed earlier in this message").
+A third run (session \texttt{walkie-20261120-144540-ae90}) shows a second prompt rule, for
+remembered objects. The object memory held two bottles whose nearest named place was the bar. The
+model went to the first with \texttt{go\_to\_object}, and \texttt{find\_objects} reported no bottle
+in view. It went to the second, where \texttt{find\_objects} reported one bottle, and only then
+called \texttt{pick\_object}, which succeeded after 224\,s. The prompt tells the model to follow
+\texttt{go\_to\_object} with \texttt{find\_objects} before it fetches a remembered object, to check
+that the object is still there. The same run also shows a guard that is in the runtime rather than
+in the prompt: an \texttt{update\_todos} call with missing fields failed schema validation, the
+runtime skipped the call queued after it in the same model message, and the model issued both again.
+
+\paragraph{Pointing (hypothetical).}
 Pointing needs no grasp: the agent resolves which object or person is meant, and the control stack
 turns the base and one arm so the hand points at it.
 \trace{Which one is my bag? Point at it.}{%
@@ -1258,7 +2117,7 @@ turns the base and one arm so the hand points at it.
 3.\ point("black backpack") $\rightarrow$ succeeded\\
 4.\ say("This black backpack next to the sofa is yours.")}
 
-\paragraph{Carrying a bag.}
+\paragraph{Carrying a bag (hypothetical).}
 The agent combines a grasp, a carrying posture and navigation, and releases the bag at the
 destination.
 \trace{Carry this bag to the entrance.}{%
@@ -1278,10 +2137,84 @@ VLA branch instead.
 \section{Real-Robot Experiments}
 \label{sec:real}
 
-The software stack used in simulation is the same as on the robot: the same robot description,
-ros2\_control controllers, MoveIt configuration and Nav2 parameters. The planned validation follows the
-progression of the proposal: known targets on the real robot, then perception-based targets, then
-the full task skills called by the agent.
+Both whole-body routes use the robot description and the MoveIt configuration that the robot uses,
+with the hardware interface switched from MuJoCo to the real drivers, but no whole-body motion has yet
+run on the hardware. Three differences between the simulated and the real setup matter for that step.
+First, localisation: in the simulated commander demonstrations the \texttt{map}--\texttt{odom}
+transform is taken from the simulator's ground truth, whereas \texttt{whole\_body\_real.launch.py}
+publishes a fixed identity transform by default. The base pose that the executors track on the robot
+is then the drive controller's own odometry estimate, and its drift is not corrected; with a map of
+the room, Nav2's localisation can replace the fixed transform. Second, the lift: in simulation it
+follows the planned trajectory like the other joints, while on the robot its goals are served by a
+separate driver node that moves it straight to the last height of the plan at up to 3\,cm/s, ignores
+the plan's timing and rejects a cancel. The guide for the first real run therefore holds back the
+stage in which the base, the lift and an arm move together, until a lift driver follows the
+trajectory's timing and accepts a cancel. Third, no node implements an emergency stop: the robot is
+stopped by cutting its motor power, and an operator keeps the switch within reach. The planned
+validation follows the progression of the proposal: known targets on the real robot, then
+perception-based targets, then the full task skills called by the agent.
+
+\paragraph{First agent session on the robot.}
+On 19~November~2026 the agent ran on the real Walkie for the first time, for about ten minutes
+(18:12 to 18:22)\footnote{Agent session \texttt{walkie-20261119-181150-7b81}.}. This session used the team's robot
+software for the bringup, the lift, Nav2 and the arms, not the whole-body routes of this project. The
+robot was set up as in the agent's runbook: requests were spoken, a speech-recognition node (Whisper
+\texttt{tiny} with Silero voice-activity detection) passed them to the agent, the agent used the same
+cloud language model as in simulation (\nolinkurl{deepseek/deepseek-v4.1-flash:nitro} through
+OpenRouter, with no local fallback), and a local text-to-speech model (Kokoro) spoke its replies.
+The agent made 22 tool calls, and all of them returned success: 11 \texttt{say} calls, one
+\texttt{list\_arm\_poses}, six \texttt{move\_arm\_to\_pose} calls that moved both arms to the stored
+\texttt{standby}, \texttt{home} and \texttt{hands\_up} poses in about 8\,s each, and four
+\texttt{move\_relative} calls through Nav2~\cite{nav2} (Table~\ref{tab:robot_session}). The stored
+poses are joint-space arm configurations that had been tried on the robot before. No whole-body,
+pick or Cartesian goal was sent. Asked to dance, the agent first declined. It then offered to wave
+its arms, said that it would not drive around at random because it could bump into someone, and
+performed a short sequence of the three poses and two small turns. It declined to sing four times,
+since its voice only speaks, and then recited a rhyme instead. The log records the tool calls and
+their results but not the spoken requests, so the requests are inferred from the agent's replies.
+
+\begin{table}[H]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabular}{c l r r r r}
+        \toprule
+        Call & Command & Time (s) & $x$ (m) & $y$ (m) & Heading ($^\circ$) \\
+        \midrule
+        1 & forward 0.5\,m & 8.1 & 0.04 & 0.01 & 0 \\
+        2 & forward 0.5\,m & 7.9 & 0.08 & $-0.01$ & 0 \\
+        \multicolumn{6}{l}{\textit{Both arms to hands\_up, home, standby and home; no base command}} \\
+        3 & turn 20$^\circ$ left & 2.4 & $-0.09$ & $-0.20$ & 14 \\
+        4 & turn 20$^\circ$ right & 2.2 & $-0.08$ & $-0.19$ & $-5$ \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small{The four base moves of the first agent session on the robot, with the pose that
+    \texttt{move\_relative} read back after each. Times are wall-clock durations of the tool calls.}}
+    \label{tab:robot_session}
+\end{table}
+
+The poses that \texttt{move\_relative} read back did not match the commands. The second 0.5\,m
+forward move changed the reported $x$ by only 0.04\,m, and the first 20$^\circ$ turn changed the
+reported heading by 14$^\circ$. Between the reading after the second forward move and the one after the first turn, during which
+the arms moved and the base only turned in place, the reported position shifted by about 0.25\,m. The distances actually travelled were not
+measured independently, so the session does not show whether the base or the reported pose was
+wrong, and the cause, for example odometry error or a localisation correction, has not been
+determined. The pose read-back must be checked against an external measurement before base motion
+on the robot is evaluated.
+
+\paragraph{Preparation for whole-body tests.}
+For the commander's whole-body route, a launch file for the robot (\texttt{whole\_body\_real.launch.py})
+and a guide for the first run in three stages were written: a rehearsal in MuJoCo on the robot
+computer, in which nothing on the robot moves; the real arms and lift, with MoveIt not commanding the
+base; and the real base, lift and arm together, which is held back for the lift driver described
+above. Only rehearsals have run so far. From a fresh clone on the robot computer, the workspace
+(74 packages) built in 16~min~11~s, and the headless MuJoCo demonstration passed all nine steps in
+2~min~1~s with a largest hand error of 16.3\,mm. On a laptop, the real launch file was run with
+MuJoCo in place of the hardware and with the robot's collision-monitor parameters: the demonstration
+again passed all nine steps, the base drove 1.05\,m and 1.09\,m in two of its goals, the largest hand
+error was 15.0\,mm, and the collision monitor slowed the base four times without stopping it. The
+agent's runbook for the robot also contains optional whole-body and pick steps, which have not yet
+been run.
 \pending{Real-robot results: base and hand tracking error of whole-body execution, grasp success on the test object set, and the observed
 sim-to-real differences (localisation, lift speed of about 3\,cm/s, arm controller gains).}
 
@@ -1311,16 +2244,23 @@ sim-to-real differences (localisation, lift speed of about 3\,cm/s, arm controll
         Objective & Status & Evidence \\
         \midrule
         1. Unified kinematic model & Done: 18-DOF model from the robot description, FK and Jacobians from
-            MuJoCo & Sections~\ref{sec:platform}, \ref{sec:walkie} \\
-        2. Coordinated base--arm planning and execution & Whole-body IK done; whole-body planning and
-            execution done in simulation; obstacle-rich path planning in progress &
-            Sections~\ref{sec:ik}--\ref{sec:planning} \\
-        3. General task skills for the agent & Agent with navigation tools done; pick, place, point and carry
-            skills designed, in progress & Sections~\ref{sec:arch}, \ref{sec:skills} \\
+            MuJoCo; the base as a planar virtual joint in the MoveIt model &
+            Sections~\ref{sec:platform}, \ref{sec:walkie}, \ref{sec:commander} \\
+        2. Coordinated base--arm planning and execution & Two whole-body routes run in simulation: IK
+            solutions executed as one trajectory, and commander goals that sample base poses;
+            obstacle-rich path planning in progress; not yet run on the robot &
+            Sections~\ref{sec:ik}--\ref{sec:planning}, \ref{sec:commander_results} \\
+        3. General task skills for the agent & Agent with typed navigation, perception and arm tools
+            done; pick skill built and run end to end by the agent in simulation, with the base still
+            during the reach; place, point and carry not built &
+            Sections~\ref{sec:agent}, \ref{sec:pick}, \ref{sec:skills} \\
         4. VLA branch & \multicolumn{2}{l}{\tbcinline} \\
-        5. Evaluation in simulation and on the robot & IK benchmarks (200 targets); execution benchmark in
-            the empty world; room, skill and real-robot evaluation pending &
-            Sections~\ref{sec:ik_bench}, \ref{sec:exec_eval} \\
+        5. Evaluation in simulation and on the robot & IK benchmarks (200 targets); execution benchmark
+            in the empty world; commander demonstrations in a test scene and pick development runs in
+            the Chulapat~14 room, in simulation; a voice-commanded agent session on the robot without
+            whole-body motion; room benchmark and whole-body evaluation on the robot pending &
+            Sections~\ref{sec:ik_bench}, \ref{sec:exec_eval}, \ref{sec:commander_results},
+            \ref{sec:pick}, \ref{sec:real} \\
         6. Task characteristics per branch & Routing criteria defined; to be validated &
             Section~\ref{sec:arch} \\
         \bottomrule
@@ -1339,29 +2279,75 @@ same code to run on the full robot. On the execution side, planning the base and
 collision-checked trajectory and executing it on one clock turned the IK solution into coordinated
 motion with base errors of millimetres.
 
+
+For the commander's route, describing the base as a planar virtual joint in the MoveIt model, without
+changing the robot description, let MoveIt plan the base, the lift and one arm as one group. Sending
+the base commands through the Nav2 collision monitor kept a safety layer in front of the wheels, and
+trying the arm and the lift alone first meant that a target within reach was reached with no base
+command at all. On the agent side, typed tools with coded failures kept the language model to
+discrete choices, such as the skill and the object or place, while \texttt{pick\_object} computed the
+stand-off and hand poses itself. The hand errors of the two routes are not directly comparable: those
+of the \texttt{full\_body\_ik} benchmark are computed by forward kinematics from
+\texttt{/joint\_states} and TF, whereas those of the commander demonstrations are measured against
+the simulator's ground truth.
+
 \paragraph{What did not.}
-The IK itself is local and collision-unaware, so it can
-propose goals that MoveIt then rejects, and a single IK goal ignores the rest of the goal set.
+The \texttt{full\_body\_ik} solver is local and collision-unaware, so it can propose goals that
+MoveIt then rejects, and a single IK goal ignores the rest of the goal set. The commander's route
+rejects colliding IK solutions and compares up to eight base poses, but it keeps one
+TRAC-IK~\cite{tracik} solution per base pose, so it explores the goal set only through the base.
+When the collision monitor stopped the base in simulation, the whole motion missed its 0.5\,s stop
+target in four of seven runs, by up to 0.09\,s of simulated time, on the lift or the arm; the base
+met it every time. In all four successful agent picks the base stood still while the arm reached, so
+a pick in which the base moves during the reach has not yet been shown with the agent. The six failed
+agent picks had different causes: twice MoveIt found no path for the right arm, once the move
+exceeded its 300\,s time limit, once none of 80 sampled base poses had an IK solution, and twice Nav2
+aborted the drive to a stand-off pose after five attempts. In the scripted pick, the commander once
+reported success with the base fixed although the hand had stopped 0.17\,m short of its target and
+the base had been pushed back 0.07\,m, because the trajectory controllers reported the goal reached.
+The script now fails a move whose hand ends more than 0.05\,m from its target; in a later run, a
+pre-grasp again ended 0.14\,m from its target, with the base turned by 0.25\,rad, while the commander
+reported success with the base fixed. Finally, the planned comparison of whole-body goals with a Nav2
+approach followed by an arm goal, over 30 runs, has not been run, so the whole-body route has not yet
+been shown to perform better than this baseline.
 
 \paragraph{Remaining work.}
-The remaining traditional-control work is the path-planning layer (Section~\ref{sec:planning}), the
-general task skills and their exposure to the agent (Section~\ref{sec:skills}), and evaluation in the furnished
-room and on the real robot. Integrating the VLA branch behind the same agent completes the
-architecture.
+The remaining traditional-control work is the path-planning layer (Section~\ref{sec:planning}); the
+place, point and carry skills and their exposure to the agent (Section~\ref{sec:skills}); an agent-driven pick in
+which the base moves during the reach; a controlled benchmark of the agent's fetch task with a fixed
+software version and with people perceived rather than taken from the simulator; and the comparison
+of whole-body goals with a Nav2 approach followed by an arm goal. Evaluation in the furnished room and
+on the real robot also remains. On the robot, whole-body motion first needs a lift driver that
+follows the trajectory's timing and accepts a cancel, and a software emergency stop. Integrating the
+VLA branch behind the same agent completes the architecture.
 
 % ============================================================
 \section{Conclusion}
+\label{sec:conclusion}
 
 This draft reports a hybrid control architecture for the Walkie mobile manipulator, in which a
 language-model agent routes general-purpose tasks to traditional coordinated base--arm control and
-hard-to-model tasks to a VLA policy. For the traditional branch, a whole-body IK solver was developed
-from the pseudoinverse to a stacked damped least-squares solve with joint-limit damping and null-space
-posture and base tasks, validated on 200 random targets, and transferred to the full Walkie simulation
-with kinematics taken from the robot description. Its solutions are executed as a single whole-body
-MoveIt plan with a dedicated executor, which in simulation executed every test solution with the
-base within 2\,mm and the hands within 14\,mm of their targets. Path planning with sampling-based methods, the general task
-skills exposed to the agent, real-robot validation and the VLA branch are in progress and will be
-added to the final report.
+hard-to-model tasks to a VLA policy. For the traditional branch, two whole-body routes were built and
+tested in simulation. In the first, a whole-body IK solver was developed from the pseudoinverse to a
+stacked damped least-squares solve with joint-limit damping and null-space posture and base tasks,
+validated on 200 random targets, and transferred to the full Walkie simulation with kinematics taken
+from the robot description. Its solutions are executed as a single whole-body MoveIt plan with a
+dedicated executor, which in simulation executed every test solution with the base within 2\,mm and
+the hands within 14\,mm of their targets. In the second, the robot's MoveIt commander plans the base,
+the lift and one arm as one group: it tries the arm and the lift alone first, and otherwise samples
+base poses, solves each with TRAC-IK and plans the cheapest usable candidates. In simulated
+demonstrations, these goals moved the base by about 1\,m, with a largest hand error of
+13.3--21.7\,mm per run. A pick skill built on the commander is called by the agent. In the simulated
+Chulapat~14 room, the agent picked up a water bottle in the kitchen and drove to the living room to
+hand it over in a recorded run, and 4 of 10 agent pick attempts succeeded over development runs with
+code changes between them. A scripted pick of a water bottle from the kitchen table, which takes the
+bottle's pose from the simulator, passed 13 of 17 runs in an earlier version and 3 of 6 runs with
+stricter checks. In all
+four successful agent picks the base stood still while the arm reached. On the real robot, the agent
+has completed a first voice-commanded session of speech, short base moves and stored arm poses, and
+the commander's whole-body route has been rehearsed only with MuJoCo in place of the hardware. Path
+planning with sampling-based methods, the place, point and carry skills, whole-body validation on the
+real robot and the VLA branch are in progress and will be added to the final report.
 
 \clearpage
 \bibliography{citations}
